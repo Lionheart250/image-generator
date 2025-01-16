@@ -72,3 +72,4 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/t
 http://localhost:3000
 
 npm install express body-parser cors bcrypt jsonwebtoken sqlite3 axios
+# image-generator
