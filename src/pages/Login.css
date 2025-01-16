@@ -1,0 +1,127 @@
+.login-container {
+    max-width: 400px;
+    margin: 40px auto;
+    padding: 20px;
+    margin-top: 100px;
+    background-color: #121212;
+    border-radius: 8px;
+    font-size: 1.8rem;
+}
+
+.login-page-heading {
+    text-align: center;
+    font-size: 24px;
+    margin-bottom: 32px;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+/* Form Styles */
+form {
+    display: none;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* Form Group */
+.form-group {
+    display: none;
+}
+
+.login-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.login-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+    padding: 10px;
+    font-size: 1rem;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    background-color: #ffffff; /* Explicit white background */
+    color: #212121; /* Ensure text color is dark */
+    transition: border-color 0.3s;
+}
+
+.login-input {
+    padding: 12px;
+    background-color: #2f2f2f;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #ffffff;
+    font-size: 16px;
+    transition: border-color 0.2s ease;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus {
+    border-color: #4caf50;
+    outline: none;
+    background-color: #f9f9f9; /* Slightly different background for focus */
+    color: #212121; /* Maintain text contrast */
+}
+
+.login-input:focus {
+    outline: none;
+    border-color: #fe2c55;
+    background-color: #363636;
+}
+
+/* Submit Button */
+.login-submit-btn {
+    background-color: #fe2c55;
+    color: white;
+    border: none;
+    padding: 14px;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.login-submit-btn:hover {
+    background-color: #ef2950;
+}
+
+.login-submit-btn:disabled {
+    background-color: #ffa5b5;
+    cursor: not-allowed;
+}
+
+.login-error {
+    color: #fe2c55;
+    font-size: 14px;
+    text-align: center;
+    margin-top: 8px;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 600px) {
+    .container {
+        margin: 50px auto;
+        padding: 15px;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    button[type="submit"] {
+        font-size: 0.9rem;
+    }
+}

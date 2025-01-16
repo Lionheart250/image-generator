@@ -1,0 +1,662 @@
+/* Main Container */
+.gallery-container {
+    margin: 20px auto; /* Centered with margin */
+    padding: 20px; /* Padding around content */
+    background-color: rgb(0, 0, 0); /* White background for content area */
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+    padding-top: 100px; /* Adjust padding to create space above the content */
+}
+
+/* Heading Styles */
+.gallery.heading {
+    text-align: center; /* Centered headings */
+    margin-bottom: 20px; /* Space below heading */
+    font-size: 2em; /* Larger font size for emphasis */
+    color: #4caf50; /* Color that matches the theme */
+}
+
+/* Gallery Grid */
+.gallery-grid {
+    display: grid; /* Use grid layout */
+    grid-template-columns: repeat(4, 1fr); /* 4 equal columns */
+    gap: 1rem; /* Space between grid items */
+    margin-top: 20px; /* Space above the grid */
+    width: 80%; /* Take up 80% of the screen width */
+    margin: 20px auto; /* Center the grid */
+}
+
+/* Gallery Item Styles */
+.gallery-item {
+    position: relative; /* Positioning for overlay */
+    overflow: hidden; /* Hide overflow for image zoom */
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow on items */
+    transition: transform 0.3s ease, box-shadow 0.3s ease; /* Smooth transitions */
+    margin-top: 100px; /* Space above the grid */
+}
+
+.gallery-item img {
+    width: 100%; /* Responsive images */
+    border-radius: 8px; /* Match item corners */
+    object-fit: contain; /* Keeps aspect ratio while showing the full image */
+    transition: transform 0.3s ease; /* Smooth image transition */
+}
+
+/* Hover Effects */
+.gallery-item:hover {
+    transform: scale(1.05); /* Zoom effect on hover */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); /* Increased shadow */
+}
+
+.gallery-item:hover img {
+    transform: scale(1.1); /* Slight zoom on image */
+}
+
+/* General Modal Styles */
+.gallery-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Modal Content Layout */
+.gallery-modal-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.gallery-modal-main {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    gap: 20px;
+}
+
+.gallery-modal-image-container {
+    flex: 2;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: #000;
+}
+
+.gallery-modal-image {
+    max-height: 90vh;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+/* Modal Info Section */
+.gallery-modal-info {
+    flex: 1;
+    max-width: 400px;
+    height: 100%;
+    background: #121212;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.gallery-nav-button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    color: white;
+    font-size: 36px;
+    width: 50px;
+    height: 80px;
+    cursor: pointer;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+}
+
+.gallery-nav-button:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.gallery-prev {
+    left: 20px;
+}
+
+.gallery-next {
+    right: 20px;
+}
+
+.gallery-close-button {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    color: white;
+    font-size: 24px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+}
+
+.gallery-close-button:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+/* Left Section: Image/Video */
+.gallery-modal-image-container {
+    flex: 3; /* Occupies 60% of the modal */
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    background: #000;
+}
+
+#gallery-modal-image {
+    max-width: 100%; /* Responsive width */
+    max-height: 100%; /* Maintain aspect ratio */
+    object-fit: contain;
+}
+
+/* Right Section: Info and Actions */
+.gallery-modal-info {
+    flex: 2; /* Occupies 40% of the modal */
+    padding: 20px;
+    display: flex; 
+    flex-direction: column; 
+    gap: 20px; 
+    background: #2a2a2a;
+    overflow-y: auto; 
+    color: #e0e0e0;
+}
+
+/* Title Styling */
+.gallery-modal-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #4caf50; 
+}
+
+.gallery-modal-title {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 500;
+    padding: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Likes Section */
+.gallery-likes-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.gallery-likes-section button {
+    padding: 10px 15px;
+    background-color: #4caf4f00;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+}
+
+.gallery-likes-section button:hover {
+    background-color: #8b8b8b18;
+}
+
+.gallery-likes-section span {
+    font-size: 1rem;
+}
+
+.gallery-like-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: white;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.gallery-like-heart {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: white;
+    stroke-width: 2;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.gallery-like-button.liked .gallery-like-heart {
+    fill: #fe2c55;
+    stroke: #fe2c55;
+    transform: scale(1.2);
+}
+
+.gallery-like-button:hover .gallery-like-heart {
+    transform: scale(1.1);
+}
+
+.gallery-like-count {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+@keyframes heart-burst {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+}
+
+.gallery-like-button.liked .gallery-like-heart {
+    animation: heart-burst 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Comments Section */
+.gallery-comments-section {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    padding-bottom: 80px; /* Make space for fixed comment form */
+}
+
+.gallery-comments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.gallery-comment-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #2c2c2c;
+}
+
+.gallery-comment-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+}
+
+.gallery-comment-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.gallery-comment-content {
+    flex: 1;
+}
+
+.gallery-comment-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.gallery-comment-username {
+    font-weight: 600;
+    color: #fff;
+    font-size: 14px;
+}
+
+.gallery-comment-time {
+    color: #8e8e8e;
+    font-size: 12px;
+}
+
+.gallery-comment-text {
+    color: #fff;
+    font-size: 14px;
+    margin: 4px 0;
+}
+
+.gallery-comment-actions {
+    display: flex;
+    gap: 16px;
+    margin-top: 4px;
+}
+
+.gallery-comment-like-btn {
+    background: transparent;
+    border: none;
+    color: #8e8e8e;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.gallery-comment-like-btn:hover {
+    color: #fe2c55;
+}
+
+.gallery-comment-like-btn.liked {
+    color: #fe2c55;
+}
+
+/* Fixed Comment Form at Bottom */
+.gallery-comment-form {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 400px; /* Match modal-info width */
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: #1a1a1a;
+    border-top: 1px solid #2c2c2c;
+}
+
+.gallery-comment-form input {
+    flex: 1;
+    height: 44px;
+    padding: 12px 16px;
+    font-size: 14px;
+    background: #2c2c2c;
+    color: #fff;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    outline: none;
+}
+
+.gallery-comment-form input:focus {
+    border-color: #666;
+}
+
+.gallery-comment-form input::placeholder {
+    color: #8e8e8e;
+}
+
+.gallery-comment-form button {
+    padding: 8px 16px;
+    background: transparent;
+    color: #fe2c55;
+    border: none;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.gallery-comment-form button:hover {
+    opacity: 0.8;
+}
+
+.gallery-comment-form button:disabled {
+    color: #8e8e8e;
+    cursor: not-allowed;
+}
+
+.gallery-comment-submit-btn {
+    height: 40px;
+    padding: 0 16px;
+    white-space: nowrap;
+    background: transparent;
+    color: #fe2c55;
+    border: none;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.gallery-comment-submit-btn:hover {
+    opacity: 0.8;
+}
+
+.gallery-comment-submit-btn:disabled {
+    color: #8e8e8e;
+    cursor: not-allowed;
+}
+
+.gallery-comment-submit {
+    padding: 8px 16px;
+    background: transparent;
+    color: #fe2c55;
+    border: none;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.gallery-comment-submit:hover {
+    opacity: 0.8;
+}
+
+.gallery-comment-submit:disabled {
+    color: #8e8e8e;
+    cursor: not-allowed;
+}
+
+.gallery-close {
+    display: inline-flex;         /* Use flexbox for centering */
+    justify-content: center;      /* Center the X horizontally */
+    align-items: center;          /* Center the X vertically */
+    width: 36px;                  /* Width of the circle */
+    height: 36px;                 /* Height of the circle */
+    border-radius: 50%;           /* Make it circular */
+    background-color: #d7d5d589;    /* Background color */
+    color: #333;                  /* Color of the X */
+    font-size: 24px;              /* Size of the X */
+    cursor: pointer;              /* Change cursor on hover */
+    transition: background-color 0.2s ease; /* Transition effect */
+    border: 2px solid transparent; /* Border for better visibility */
+}
+
+.gallery-close:hover {
+    background-color: rgba(101, 101, 101, 0.1); /* Light background on hover */
+    border: 2px solid #333; /* Border color on hover */
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .modal-content {
+        flex-direction: column; /* Stack vertically */
+    }
+
+    .modal-image-container {
+        flex: 1;
+    }
+
+    .modal-info {
+        flex: 1;
+    }
+}
+
+/* Comment Form Layout */
+.gallery-comment-form {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 400px;
+    padding: 12px 16px;
+    background: #1a1a1a;
+    border-top: 1px solid #2c2c2c;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gallery-comment-form input {
+    flex: 1;
+    height: 40px;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: #2c2c2c;
+    color: #fff;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    outline: none;
+}
+
+.gallery-comment-form button {
+    height: 40px;
+    padding: 0 16px;
+    white-space: nowrap;
+    background: transparent;
+    color: #fe2c55;
+    border: none;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.gallery-comment-form button:hover {
+    opacity: 0.8;
+}
+
+.gallery-comment-form button:disabled {
+    color: #8e8e8e;
+    cursor: not-allowed;
+}
+
+/* Modal Comment Section */
+.gallery-comment-form {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 400px;
+    padding: 16px;
+    background: #121212;
+    border-top: 1px solid #2c2c2c;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.gallery-comment-input {
+    flex: 1;
+    height: 40px;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: #2f2f2f;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    outline: none;
+}
+
+.gallery-comment-input:focus {
+    border-color: #fe2c55;
+}
+
+.gallery-comment-input::placeholder {
+    color: #8e8e8e;
+}
+
+.gallery-comment-submit {
+    padding: 8px 16px;
+    background: transparent;
+    color: #fe2c55;
+    border: none;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.gallery-comment-submit:hover {
+    opacity: 0.8;
+}
+
+.gallery-comment-submit:disabled {
+    color: #8e8e8e;
+    cursor: not-allowed;
+}
+
+.gallery-close-button {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    color: white;
+    font-size: 24px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+}
+
+.gallery-close-button:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+/* Remove unused/duplicate classes */
+.comment-form,
+.comment-form button,
+.comment-submit-btn,
+.close {
+    display: none;
+}
+
+.gallery-delete-section {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    padding: 0;
+    z-index: 3;
+    width: auto;
+}
+
+.gallery-delete-button {
+    padding: 8px 16px;
+    background: rgba(255, 44, 85, 0.9);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+}
+
+.gallery-delete-button:hover {
+    background: rgba(255, 31, 71, 1);
+    transform: translateY(-1px);
+}
+
+.gallery-delete-button:active {
+    transform: translateY(0);
+}

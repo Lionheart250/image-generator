@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.loading {
+  @apply text-white/80 text-lg;
+}
+
+.loading-bar-container {
+  @apply w-full max-w-md mx-auto;
+}
+
+.loading-bar {
+  @apply transition-all duration-500 ease-out;
+}
+
+.error {
+  @apply text-red-400;
+}

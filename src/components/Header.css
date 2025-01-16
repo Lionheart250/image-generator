@@ -1,0 +1,138 @@
+/* Header Section */
+header {
+    background-color: #121212;
+    color: white;
+    padding: 16px 0;
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 99%;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+/* Logo */
+.logo {
+    font-size: 24px;
+    color: #fe2c55;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.logo h1 {
+    margin: 0;
+}
+
+.logo-link {
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.logo-link:hover {
+    color: #ff425f;
+}
+
+.nav-links {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+}
+
+.nav-links a {
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.nav-links a.active {
+    color: #fe2c55;
+    font-weight: 600;
+    background-color: rgba(254, 44, 85, 0.1);
+}
+
+.nav-links a:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-links a.active:hover {
+    background-color: rgba(254, 44, 85, 0.15);
+}
+
+
+/* User Info */
+.user-info {
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    transition: background-color 0.3s ease;
+    position: relative;
+    top: 100%;
+    right: 0;
+}
+
+.user-info:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: #1f1f1f;
+    border-radius: 8px;
+    min-width: 180px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.auth-button.settings,
+.auth-button.logout {
+    width: 100%;
+    padding: 12px 16px;
+    text-align: left;
+    background: transparent;
+    color: #ffffff;
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.auth-button.settings:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.auth-button.logout {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fe2c55;
+}
+
+.auth-button.logout:hover {
+    background-color: rgba(254, 44, 85, 0.08);
+}
+
+.profile-picture {
+    width: 40px; /* adjust size as needed */
+    height: 40px; /* adjust size as needed */
+    border-radius: 50%; /* circular profile picture */
+    object-fit: cover; /* cover the image properly */
+}
+
+
