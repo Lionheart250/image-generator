@@ -165,6 +165,8 @@ img {
     background-color: #ff4e50; /* Highlight selected button */
 }
 
+
+
 /* Unique Loading Section */
 .image-generator-loading-section {
     text-align: center;
@@ -590,4 +592,26 @@ button {
 @keyframes glow {
     from { text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #fe2c55; }
     to { text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px #fe2c55; }
+}
+
+.image-generator-upscale-btn {
+    flex: 1;
+    padding: 8px 12px;
+    background: #2f2f2f;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #ffffff;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.image-generator-upscale-btn:hover {
+    background: #3d3d3d;
+    border-color: #555;
+}
+
+.image-generator-upscale-btn.selected {
+    background: #fe2c55;
+    border-color: #fe2c55;
 }

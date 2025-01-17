@@ -16,11 +16,6 @@
     font-weight: 700;
 }
 
-/* Form Styles */
-form {
-    display: none;
-}
-
 .login-form {
     display: flex;
     flex-direction: column;

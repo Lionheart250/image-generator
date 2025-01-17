@@ -93,18 +93,17 @@ const Header = () => {
                             </div>
                             {isDropdownOpen && (
                                 <div className="dropdown-menu" ref={dropdownRef}>
-                                    <button 
-                                        onClick={() => navigate('/settings')} 
-                                        className="auth-button settings"
-                                    >
-                                        Settings
-                                    </button>
-                                    <button 
-                                        onClick={handleLogout} 
-                                        className="auth-button logout"
-                                    >
-                                        Sign Out
-                                    </button>
+                                    <button onClick={() => navigate('/upgrade')} className="auth-button upgrade">Upgrade</button>
+                                    <button onClick={() => navigate('/credits')} className="auth-button credits">Get Credits</button>
+                                    <button onClick={() => navigate(`/profile/${user.id}`)} className="auth-button profile">Profile</button>
+                                    <button onClick={() => navigate('/settings')} className="auth-button settings">Settings</button>
+                                    <button onClick={() => window.open('https://discord.com', '_blank')} className="auth-button discord">Discord</button>
+                                    <button onClick={() => navigate('/contact')} className="auth-button contact">Contact</button>
+                                    <button onClick={() => navigate('/guide')} className="auth-button guide">Guide</button>
+                                    <button onClick={() => navigate('/affiliate')} className="auth-button affiliate">Affiliate</button>
+                                    <button onClick={() => navigate('/language')} className="auth-button language">Language</button>
+                                    <button onClick={() => navigate('/darkmode')} className="auth-button darkmode">Dark Mode</button>
+                                    <button onClick={handleLogout} className="auth-button logout">Logout</button>
                                 </div>
                             )}
                         </>

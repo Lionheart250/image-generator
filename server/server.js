@@ -66,14 +66,28 @@ const authenticateTokenWithAutoRefresh = (req, res, next) => {
 
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
         if (err) {
-            console.error('Token verification error:', err);
-            return res.status(401).json({ error: 'Invalid token' });
-        }
+            if (err.name === 'TokenExpiredError') {
+                // Token has expired, attempt to refresh it
+                const refreshToken = req.headers['x-refresh-token'];
+                if (!refreshToken) return res.status(401).json({ error: 'Unauthorized' });
 
-        // Set user ID from decoded token
-        req.user = { id: decoded.userId };
-        console.log('Authenticated user:', req.user);
-        next();
+                jwt.verify(refreshToken, REFRESH_SECRET, (err, decoded) => {
+                    if (err) return res.status(403).json({ error: 'Forbidden' });
+
+                    const newAccessToken = jwt.sign({ userId: decoded.userId }, JWT_SECRET, { expiresIn: '15m' });
+                    res.setHeader('x-access-token', newAccessToken);
+                    req.user = { id: decoded.userId };
+                    next();
+                });
+            } else {
+                console.error('Token verification error:', err);
+                return res.status(401).json({ error: 'Invalid token' });
+            }
+        } else {
+            req.user = { id: decoded.userId };
+            console.log('Authenticated user:', req.user);
+            next();
+        }
     });
 };
 
@@ -157,8 +171,8 @@ app.post('/login', async (req, res) => {
             }
 
             const role = user.role; // Ensure the role is fetched from the user table
-            const token = jwt.sign({ userId: user.id, username: user.username, role }, JWT_SECRET, { expiresIn: '1h' });
-            const refreshToken = jwt.sign({ userId: user.id, username: user.username, role }, REFRESH_SECRET, { expiresIn: '7d' });
+            const token = jwt.sign({ userId: user.id, username: user.username, role }, JWT_SECRET, { expiresIn: '7d' });
+            const refreshToken = jwt.sign({ userId: user.id, username: user.username, role }, REFRESH_SECRET, { expiresIn: '30d' });
 
             // Save the refresh token in the database
             const expiresAt = new Date();
@@ -278,7 +292,20 @@ app.post('/logout', (req, res) => {
 app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) => {
     console.log('Request user:', req.user); // Debugging line to check user data
 
-    const { prompt, negativePrompt, cfgScale, steps, width, height } = req.body;
+    const { 
+        prompt, 
+        negativePrompt, 
+        cfgScale, 
+        steps, 
+        width, 
+        height, 
+        enable_hr, 
+        denoising_strength, 
+        upscale_factor, 
+        hires_width, 
+        hires_height 
+    } = req.body;
+
     const userId = req.user.id; // Extract userId from the authenticated user
 
     // Validate required fields
@@ -295,6 +322,19 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
         return res.status(400).json({ error: 'Width and Height must be between 256 and 2048' });
     }
 
+    // Validate HiRes parameters only if enable_hr is true
+    if (enable_hr) {
+        if (typeof denoising_strength !== 'number' || denoising_strength < 0 || denoising_strength > 1) {
+            return res.status(400).json({ error: 'Denoising strength must be a number between 0 and 1' });
+        }
+        if (upscale_factor < 1 || upscale_factor > 4) {
+            return res.status(400).json({ error: 'Upscale factor must be between 1 and 4' });
+        }
+        if (hires_width < 256 || hires_width > 2048 || hires_height < 256 || hires_height > 2048) {
+            return res.status(400).json({ error: 'HiRes Width and Height must be between 256 and 2048' });
+        }
+    }
+
     // Prepare payload for the image generation API
     const payload = {
         prompt,
@@ -303,6 +343,11 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
         steps,
         width,
         height,
+        enable_hr, // Use the value from the request to determine HiRes fix
+        denoising_strength: enable_hr ? denoising_strength : undefined, // Only include if HiRes is enabled
+        upscale_factor: enable_hr ? upscale_factor : undefined, // Only include if HiRes is enabled
+        hires_width: enable_hr ? hires_width : undefined, // Only include if HiRes is enabled
+        hires_height: enable_hr ? hires_height : undefined // Only include if HiRes is enabled
     };
 
     try {
@@ -324,6 +369,11 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
                 steps,
                 width,
                 height,
+                enable_hr,
+                denoising_strength,
+                upscale_factor,
+                hires_width,
+                hires_height
             });
 
             if (!userId) {
@@ -333,16 +383,21 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
 
             // Insert the image data into the database
             db.run(
-                'INSERT INTO images (user_id, image_url, prompt, negative_prompt, cfg_scale, steps, width, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+                'INSERT INTO images (user_id, image_url, prompt, negative_prompt, cfg_scale, steps, width, height, enable_hires_fix, denoising_strength, upscale_factor, hires_width, hires_height) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
                 [
-                    Number(userId), // This should be the id from the users table
+                    Number(userId), 
                     imageUrl, 
                     prompt || '', 
                     negativePrompt || '', 
                     Number(cfgScale), 
                     Number(steps), 
                     Number(width), 
-                    Number(height)
+                    Number(height),
+                    enable_hr, // Save HiRes flag
+                    enable_hr ? denoising_strength : null, // Save denoising strength if HiRes is enabled
+                    enable_hr ? upscale_factor : null, // Save upscale factor if HiRes is enabled
+                    enable_hr ? hires_width : null, // Save HiRes width if HiRes is enabled
+                    enable_hr ? hires_height : null // Save HiRes height if HiRes is enabled
                 ], 
                 function(err) {
                     if (err) {
@@ -360,6 +415,8 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
         res.status(500).json({ error: `Failed to connect to API: ${error.message}` });
     }
 });
+
+
 
 
 // Fetch images from the database
@@ -692,6 +749,50 @@ app.use((err, req, res, next) => {
     res.status(500).json({ 
         error: 'Internal server error',
         details: err.message 
+    });
+});
+
+// Endpoint to get user profile
+app.get('/user_profile/:id', authenticateTokenWithAutoRefresh, (req, res) => {
+    const userId = req.params.id; // Use the id parameter from the URL
+    console.log(`Fetching profile for user ID: ${userId}`); // Debugging statement
+
+    const query = `
+        SELECT username, bio, profile_picture
+        FROM users
+        WHERE id = ?
+    `;
+
+    db.get(query, [userId], (err, row) => {
+        if (err) {
+            console.error('Error fetching user profile:', err);
+            return res.status(500).json({ error: 'Failed to fetch user profile' });
+        }
+        if (!row) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        console.log('Query result:', row); // Debugging statement
+        res.json({ userId, ...row }); // Include userId in the response
+    });
+});
+
+// Endpoint to update user profile
+app.post('/update_profile', authenticateTokenWithAutoRefresh, (req, res) => {
+    const userId = req.user.id;
+    const { username, bio } = req.body;
+
+    const query = `
+        UPDATE users
+        SET username = ?, bio = ?
+        WHERE id = ?
+    `;
+
+    db.run(query, [username, bio, userId], function (err) {
+        if (err) {
+            console.error('Error updating profile:', err);
+            return res.status(500).json({ error: 'Failed to update profile' });
+        }
+        res.json({ message: 'Profile updated successfully' });
     });
 });
 
