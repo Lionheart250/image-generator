@@ -6,9 +6,9 @@
     padding: 12px;
     background: #121212;
     border-radius: 8px;
-    height: calc(100vh - 220px);
+    height: calc(100vh - 160px);
     max-width: 80%;
-    margin-top: 7.5%;
+    margin-top: 5.5%;
     margin-bottom: 0;
     margin-left: auto;
     margin-right: auto;
@@ -615,3 +615,4 @@ button {
     background: #fe2c55;
     border-color: #fe2c55;
 }
+

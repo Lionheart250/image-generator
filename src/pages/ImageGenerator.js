@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext'; // Adjust path to your AuthContext
 import { useNavigate } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
 import './ImageGenerator.css';
 
 function ImageGenerator() {
@@ -12,14 +13,30 @@ function ImageGenerator() {
   const [aspectRatio, setAspectRatio] = useState('Portrait');
   const [image, setImage] = useState(null);
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [enableUpscale, setEnableUpscale] = useState(false); // State for upscaling
 
   useEffect(() => {
-    if (!user) {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      const { exp } = jwtDecode(token);
+      if (Date.now() >= exp * 1000) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        navigate('/login');
+      } else {
+        setLoading(false);
+      }
+    } catch (error) {
       navigate('/login');
     }
-  }, [user, navigate]);
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

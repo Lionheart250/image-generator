@@ -669,7 +669,7 @@ app.post('/add_favorite', authenticateTokenWithAutoRefresh, (req, res) => {
 });
 
 // Upload Profile Picture
-app.post('/upload_profile_picture', authenticateTokenWithAutoRefresh, upload.single('profile_picture'), (req, res) => {
+app.post('/upload_profile_picture', authenticateTokenWithAutoRefresh, upload.single('profile_picture'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -678,33 +678,59 @@ app.post('/upload_profile_picture', authenticateTokenWithAutoRefresh, upload.sin
     const filepath = req.file.path;
     const filename = req.file.filename;
 
-    // First, insert into profile_pictures table
-    db.run(
-        'INSERT INTO profile_pictures (user_id, filename, filepath) VALUES (?, ?, ?)',
-        [userId, filename, filepath],
-        function(err) {
-            if (err) {
-                console.error('Error saving to profile_pictures:', err);
-                return res.status(500).json({ error: 'Failed to save profile picture' });
-            }
-
-            // Then update users table
-            db.run(
-                'UPDATE users SET profile_picture = ? WHERE id = ?',
-                [filepath, userId],
-                function(err) {
-                    if (err) {
-                        console.error('Error updating user profile:', err);
-                        return res.status(500).json({ error: 'Failed to update profile' });
-                    }
-                    res.json({ 
-                        message: 'Profile picture updated successfully',
-                        profilePicturePath: filepath 
-                    });
+    try {
+        // Get old picture info
+        const oldPicture = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT filepath FROM profile_pictures WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+                [userId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row ? row.filepath : null);
                 }
             );
+        });
+
+        // Delete old file if exists
+        if (oldPicture) {
+            try {
+                await fs.promises.unlink(oldPicture);
+            } catch (err) {
+                console.log('No previous profile picture to delete');
+            }
         }
-    );
+
+        // Insert into profile_pictures table
+        db.run(
+            'INSERT INTO profile_pictures (user_id, filename, filepath) VALUES (?, ?, ?)',
+            [userId, filename, filepath],
+            function(err) {
+                if (err) {
+                    console.error('Error saving to profile_pictures:', err);
+                    return res.status(500).json({ error: 'Failed to save profile picture' });
+                }
+
+                // Update users table
+                db.run(
+                    'UPDATE users SET profile_picture = ? WHERE id = ?',
+                    [filepath, userId],
+                    function(err) {
+                        if (err) {
+                            console.error('Error updating user profile:', err);
+                            return res.status(500).json({ error: 'Failed to update profile' });
+                        }
+                        res.json({ 
+                            message: 'Profile picture updated successfully',
+                            profilePicturePath: filepath 
+                        });
+                    }
+                );
+            }
+        );
+    } catch (error) {
+        console.error('Error handling profile picture:', error);
+        res.status(500).json({ error: 'Failed to process profile picture' });
+    }
 });
 
 // Update profile picture retrieval endpoint

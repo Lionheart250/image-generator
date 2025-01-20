@@ -41,26 +41,33 @@ const Header = () => {
     useEffect(() => {
         const fetchProfilePicture = async () => {
             try {
-                const response = await fetch('http://localhost:3000/profile_picture', {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    throw new Error('No authentication token found');
+                }
+
+                const response = await fetch(`http://localhost:3000/user_profile/${user.id}`, {
                     headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        'Authorization': `Bearer ${token}`
                     }
                 });
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.profile_picture) {
-                        setProfilePicture(`http://localhost:3000/${data.profile_picture}`);
-                    }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
+                
+                const data = await response.json();
+                setProfilePicture(`http://localhost:3000/${data.profile_picture}`);
             } catch (error) {
                 console.error('Error fetching profile picture:', error);
+                setProfilePicture('/default-avatar.png');
             }
         };
 
-        if (localStorage.getItem('token')) {
+        if (user) {
             fetchProfilePicture();
         }
-    }, [setProfilePicture]);
+    }, [user, setProfilePicture]);
 
     return (
         <header>
