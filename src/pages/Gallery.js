@@ -3,6 +3,10 @@ import { jwtDecode } from 'jwt-decode'; // Ensure jwt-decode is installed
 import './Gallery.css'; // Make sure this file exists with proper styles
 import { useNavigate, useLocation } from 'react-router-dom';
 import debounce from 'lodash.debounce'; // Ensure lodash.debounce is installed
+import { ReactComponent as LikeIcon } from '../assets/icons/like.svg';
+import { ReactComponent as CommentIcon } from '../assets/icons/comment.svg';
+import { ReactComponent as ShareIcon } from '../assets/icons/share.svg';
+import { ReactComponent as BookmarkIcon } from '../assets/icons/bookmark.svg';
 
 const Gallery = () => {
     const [images, setImages] = useState([]);
@@ -16,6 +20,7 @@ const Gallery = () => {
     const [username, setUsername] = useState(''); // For storing the username from the token
     const [commentLikes, setCommentLikes] = useState({});
     const [modalOpen, setModalOpen] = useState(false); // Add modalOpen state
+    const [imageUserDetails, setImageUserDetails] = useState({});
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -68,8 +73,23 @@ const Gallery = () => {
     const fetchImageDetails = async (imageId) => {
         const token = localStorage.getItem('token');
         if (!token) return;
-    
+
         try {
+            // Fetch user details for image
+            const imageDetailsResponse = await fetch(`http://localhost:3000/images/${imageId}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (imageDetailsResponse.ok) {
+                const imageData = await imageDetailsResponse.json();
+                setImageUserDetails(prev => ({
+                    ...prev,
+                    [imageId]: imageData
+                }));
+            }
+
+            // Existing likes/comments fetch
             const likeResponse = await fetch(`http://localhost:3000/fetch_likes?id=${imageId}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -82,7 +102,7 @@ const Gallery = () => {
                     setUserLikedImages((prev) => new Set(prev).add(imageId));
                 }
             }
-    
+
             const commentResponse = await fetch(`http://localhost:3000/fetch_comments?id=${imageId}`, {
                 headers: {
                     'Authorization': `Bearer ${token}` 
@@ -97,7 +117,6 @@ const Gallery = () => {
             console.error('Error fetching image details:', error);
         }
     };
-    
 
     const handleLike = async () => {
         const token = localStorage.getItem('token');
@@ -159,10 +178,6 @@ const Gallery = () => {
             console.error('Error toggling like:', error);
         }
     };
-    
-    
-    
-    
 
     // Update comment state when adding new comment
     const handleCommentSubmit = async (e) => {
@@ -210,8 +225,6 @@ const Gallery = () => {
             console.error('Error adding comment:', error);
         }
     };
-    
-     
 
     const handleDeleteImage = async () => {
         const token = localStorage.getItem('token');
@@ -243,7 +256,6 @@ const Gallery = () => {
             alert(error.message);
         }
     };
-     
 
     const handleCommentLike = async (commentId) => {
         const token = localStorage.getItem('token');
@@ -363,10 +375,21 @@ const Gallery = () => {
             day: 'numeric',
         });
     };
-    
-    // Example usage
-    
-    
+        
+    const handleUsernameClick = (user_id) => {
+        navigate(`/profile/${user_id}`);
+    };
+
+    // Add formatDate function
+    const formatDate = (date) => {
+        if (!date) return '';
+        const d = new Date(date);
+        return d.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    };
 
     return (
         <div className="gallery-container">
@@ -401,26 +424,43 @@ const Gallery = () => {
                                 </button>
                             </div>
                             <div className="gallery-modal-info">
+                                <div className="gallery-user-info">
+                                    <img 
+                                        src={imageUserDetails[activeImageId]?.profile_picture || '/default-avatar.png'}
+                                        alt="Profile"
+                                        className="gallery-user-avatar"
+                                        onClick={() => handleUsernameClick(imageUserDetails[activeImageId]?.user_id)}
+                                    />
+                                    <div className="gallery-user-details">
+                                        <h4 onClick={() => handleUsernameClick(imageUserDetails[activeImageId]?.user_id)}>
+                                            {imageUserDetails[activeImageId]?.username}
+                                        </h4>
+                                        <span className="gallery-creation-date">
+                                            {formatDate(images.find(img => img.id === activeImageId)?.created_at)}
+                                        </span>
+                                    </div>
+                                    <button className="gallery-follow-button">Follow</button>
+                                </div>
                                 <div className="gallery-modal-title">
-                                    {images.find((img) => img.id === activeImageId)?.prompt}
+                                    {images.find(img => img.id === activeImageId)?.prompt}
                                 </div>
-                                <div className="gallery-likes-section">
-                                <button 
-                                    className={`gallery-like-button ${userLikedImages.has(activeImageId) ? 'liked' : ''}`}
-                                    onClick={handleLike}
-                                >
-                                    <svg 
-                                        className={`gallery-like-heart ${userLikedImages.has(activeImageId) ? 'liked' : ''}`} 
-                                        viewBox="0 0 24 24"
-                                >
-                                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                                    </svg>
-                                    <span className="gallery-like-count">
-                                        {likes[activeImageId] || 0}
-                                 </span>
-                                </button>
+                                <div className="gallery-interaction-buttons">
+                                    <button onClick={() => handleLike(activeImageId)} className="gallery-action-btn">
+                                        <LikeIcon className={userLikedImages.has(activeImageId) ? 'liked' : ''} />
+                                        <span>{likes[activeImageId] || 0}</span>
+                                    </button>
+                                    <button className="gallery-action-btn">
+                                        <CommentIcon />
+                                        <span>{comments[activeImageId]?.length || 0}</span>
+                                    </button>
+                                    <button className="gallery-action-btn">
+                                        <ShareIcon />
+                                    </button>
+                                    <button className="gallery-action-btn">
+                                        <BookmarkIcon />
+                                    </button>
                                 </div>
-
+                                {/* Existing comments section */}
                                 <div className="gallery-comments-section">
                                     <h4 className="gallery-comments-heading">Comments</h4>
                                     <ul className="gallery-comments-list">
@@ -437,7 +477,14 @@ const Gallery = () => {
                                                 </div>
                                                 <div className="gallery-comment-content">
                                                     <div className="gallery-comment-header">
-                                                        <span className="gallery-comment-username">{comment.username}</span>
+                                                        <span 
+                                                            className="gallery-comment-username"
+                                                            onClick={() => handleUsernameClick(comment.user_id)}
+                                                            role="button"
+                                                            tabIndex={0}
+                                                        >
+                                                            {comment.username}
+                                                        </span>
                                                         <span className="gallery-comment-time">
                                                             {formatTimestamp(comment.created_at)}
                                                         </span>

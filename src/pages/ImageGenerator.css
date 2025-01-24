@@ -6,54 +6,24 @@
     padding: 12px;
     background: #121212;
     border-radius: 8px;
-    height: calc(100vh - 160px);
-    max-width: 80%;
-    margin-top: 5.5%;
-    margin-bottom: 0;
-    margin-left: auto;
-    margin-right: auto;
-    overflow-y: auto; /* Allow scrolling if needed */
+    width: 80%;
+    height: 80vh;
+    max-height: 80vh;
+    margin: 12vh auto;
+    overflow: hidden;
 }
 
-/* Ensure prompt and negative prompt text is white */
-.image-generator-form-container input[type="text"],
-.image-generator-form-container textarea {
-    color: white; /* Text color */
-    background-color: rgba(255, 255, 255, 0.1); /* Light transparent background */
-    border: 1px solid rgba(255, 255, 255, 0.3); /* Light border */
-    padding: 10px; /* Add padding for better spacing */
-    font-size: 16px; /* Ensure consistent font size */
-    border-radius: 4px; /* Rounded corners for inputs */
-}
-
-.image-generator-container input[type="text"]::placeholder,
-.image-generator-container textarea::placeholder {
-    color: rgba(255, 255, 255, 0.6); /* Light gray placeholder */
-}
-
-.image-generator-container input[type="text"]:focus,
-.image-generator-container textarea:focus {
-    outline: none;
-    border-color: #ff4e50; /* Highlight border when focused */
-}
-
-
-/* Adjust ImageGenerator styles if necessary */
-.image-generator {
-    width: 100%; /* Full width of parent */
-}
-
+/* Image Generator Header */
 .image-generator-heading {
     color: #ffffff;
     font-size: 24px;
     font-weight: 700;
-    margin-bottom: 16px; /* Reduced heading margin */
+    margin-bottom: 16px;
 }
 
 /* Form Container */
 .image-generator-form-container {
     padding: 16px;
-    background: rgba(255, 255, 255, 0.03);
     border-radius: 8px;
 }
 
@@ -61,27 +31,53 @@
 .image-generator-form {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 8px;
+    padding: 16px;
+    height: 100%;
+    max-height: 88vh;
     margin: 0 auto;
-    background-color: rgba(255, 255, 255, 0.1); /* Slightly transparent background */
+    background-color: rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    padding: 20px; /* Padding for form */
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     width: 100%;
+    overflow: hidden;
 }
 
+/* Form Group */
 .image-generator-form-group {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 8px; /* Reduced spacing between form groups */
+    margin-bottom: 8px;
+    flex: 0 0 auto;
 }
 
 .image-generator-form-group label {
-    color: white; /* Ensure all form labels are white */
-    font-weight: bold; /* Optional: make the labels bold */
-    margin-bottom: 5px; /* Space between label and input */
-    display: block; /* Make labels occupy their own line */
+    color: white;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+/* Input and Textarea Styles */
+.image-generator-form-container input[type="text"],
+.image-generator-form-container textarea {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 4px;
+}
+
+.image-generator-container input[type="text"]::placeholder,
+.image-generator-container textarea::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.image-generator-container input[type="text"]:focus,
+.image-generator-container textarea:focus {
+    outline: none;
+    border-color: #ff4e50;
 }
 
 /* Loading and Error Messages */
@@ -89,209 +85,56 @@
 .error-message {
     text-align: center;
     margin-top: 20px;
-    color: white; /* Ensure text is visible on dark background */
+    color: white;
 }
 
-/* Image display */
+/* Image Display */
 img {
-    max-width: 100%; /* Responsive */
-    height: 100%; /* Match the height of the container */
-    object-fit: cover; /* Maintain aspect ratio */
-    display: block; /* Ensures the image occupies its own space */
-
-}
-
-/* Unique Creative Control Section */
-.image-generator-creative-control-section {
-    margin-bottom: 20px;
-}
-
-.image-generator-creative-control-section label {
-    color: white; /* Label text color */
-    font-weight: bold;
-    margin-bottom: 10px;
-    display: block; /* Ensure the label is on its own line */
-}
-
-.image-generator-creative-control-btn {
-    display: flex;
-    gap: 10px; /* Space between buttons */
-}
-
-.image-generator-creative-control-btn {
-    background-color: gray; /* Default background */
-    color: white; /* Button text color */
-    padding: 10px 15px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-
-.image-generator-creative-control-btn.selected {
-    background-color: #ff4e50; /* Highlight selected button */
-}
-
-/* Unique Aspect Ratio Section */
-.image-generator-aspect-ratio-section {
-    margin-bottom: 20px;
-}
-
-.image-generator-aspect-ratio-section label {
-    color: white; /* Label text color */
-    font-weight: bold;
-    margin-bottom: 10px;
-    display: block; /* Ensure the label is on its own line */
-}
-
-.image-generator-aspect-ratio-buttons {
-    display: flex;
-    gap: 8px; /* Space between buttons */
-    margin-top: 8px; /* Adjusted margin */
-}
-
-.image-generator-aspect-ratio-btn {
-    flex: 1; /* Adjusted flex property */
-    padding: 8px 12px;
-    background-color: gray; /* Default background */
-    color: white; /* Button text color */
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-
-.image-generator-aspect-ratio-btn.selected {
-    background-color: #ff4e50; /* Highlight selected button */
-}
-
-
-
-/* Unique Loading Section */
-.image-generator-loading-section {
-    text-align: center;
-    margin-top: 250px;
-    font-size: 1.25rem;
-    color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-/* Loading Spinner Animation */
-.image-generator-loading-spinner {
-    border: 4px solid rgba(255, 255, 255, 0.2); /* Light border */
-    border-top: 4px solid #ff4e50; /* Highlighted border */
-    border-radius: 50%; /* Circle shape */
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite; /* Spinning animation */
-}
-
-/* Spinner Keyframes */
-@keyframes spin {
-    from {
-        transform: rotate(0deg); /* Start rotation */
-    }
-    to {
-        transform: rotate(360deg); /* Full rotation */
-    }
-}
-
-/* Loading Text Style */
-.image-generator-loading-text {
-    margin-left: 10px; /* Space next to the spinner */
-}
-
-.image-generator-form-container {
-    padding: 16px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-}
-
-.image-generator-label {
-    color: #ffffff;
-    font-size: 13px;
-    font-weight: 600;
+    max-width: 100%;
+    height: 100%;
+    object-fit: cover;
     display: block;
-    margin-bottom: 4px;
-    font-weight: 500;
 }
 
-.image-generator-input {
-    width: 100%;
-    padding: 8px;
-    background: #2f2f2f;
-    border: 1px solid #444;
-    border-radius: 4px;
-    color: #ffffff;
-    font-size: 14px;
-    transition: all 0.2s ease;
-    color: white;
-    background-color: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 10px;
-    font-size: 14px;
-    border-radius: 4px;
-    height: 36px;
-}
-
-.image-generator-input:focus {
-    outline: none;
-    border-color: #fe2c55;
-    background: #363636;
-    outline: none;
-    border-color: #fe2c55;
-}
-
-.image-generator-input::placeholder {
-    color: #8e8e8e;
-}
-
-.image-generator-creative-section {
-    margin-top: 32px;
-    padding: 12px; /* Reduced padding in sections */
+/* Creative Control Section */
+.image-generator-aspect-section,
+.image-generator-creative-section,
+.image-generator-upscale-section {
+    margin-bottom: 20px;
     background: rgba(255, 255, 255, 0.03);
     border-radius: 8px;
+    padding: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 8px;
+    flex: 0 0 auto;
 }
 
-.image-generator-creative-buttons {
+.image-generator-creative-control-section label,
+.image-generator-aspect-section label,
+.image-generator-upscale-section {
+    color: white;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.image-generator-aspect-btn.selected,
+.image-generator-creative-btn.selected,
+.image-generator-upscale-btn.selected {
+    background-color: #ff4e50;
+}
+
+/* Aspect Ratio Buttons */
+.image-generator-aspect-buttons,
+.image-generator-creative-buttons,
+.image-generator-upscale-buttons{
     display: flex;
     gap: 8px;
-    margin-top: 12px;
-    padding: 4px;
+    margin-top: 8px;
 }
 
-.image-generator-creative-btn {
-    flex: 1;
-    padding: 8px 12px;
-    background: #2f2f2f;
-    border: 1px solid #444;
-    border-radius: 4px;
-    color: #ffffff;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-    /* Remove any transform properties */
-    /* Remove box-shadow transitions */
-}
-
-.image-generator-creative-btn:hover {
-    background: #363636;
-    /* Remove transform and box-shadow changes */
-}
-
-.image-generator-creative-btn.selected {
-    background: #fe2c55;
-    border-color: #fe2c55;
-    /* Keep consistent sizing, remove shadows */
-}
-
+/* Submit Button */
 .image-generator-submit-btn {
     width: 100%;
-    padding: 10px;
+    padding: 8px;
     background: #fe2c55;
     color: white;
     border: none;
@@ -300,7 +143,8 @@ img {
     font-weight: 600;
     cursor: pointer;
     transition: background-color 0.2s;
-    margin-top: 8px;
+    margin-top: auto;
+    flex: 0 0 auto;
 }
 
 .image-generator-submit-btn:hover {
@@ -308,57 +152,137 @@ img {
 }
 
 .image-generator-submit-btn.disabled {
-    background: #666;
+    background: linear-gradient(45deg, #2f2f2f, #363636);
+    color: rgba(255, 255, 255, 0.4);
     cursor: not-allowed;
+    position: relative;
+    overflow: hidden;
+    opacity: 0.7;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    animation: disabledPulse 2s ease-in-out infinite;
 }
 
-.image-generator-preview {
+@keyframes disabledPulse {
+    0% {
+        box-shadow: 0 0 5px rgba(254, 44, 85, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(254, 44, 85, 0.2);
+    }
+    100% {
+        box-shadow: 0 0 5px rgba(254, 44, 85, 0.1);
+    }
+}
+
+.image-generator-submit-btn.disabled:hover {
+    transform: none;
+    background: linear-gradient(45deg, #2f2f2f, #363636);
+}
+
+/* Preview Section */
+
+@property --angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+}
+
+.image-generator-preview-wrapper {
+    position: relative;
+    z-index: 1;
+    width: auto;
+    height: 100%; /* Ensure full height */
+    min-height: inherit; /* Inherit minimum height from container */
+}
+
+.image-generator-preview-container {
     position: relative;
     width: 100%;
     height: 100%;
-    min-height: 400px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     border-radius: 8px;
+    padding: 20px;
     overflow: hidden;
 }
 
-.image-generator-preview::before {
+.image-generator-preview {
+    max-height: 88vh;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.3);
+    position: relative;
+    background: #121212;
+    border-radius: 10px;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-generator-preview.loading::after,
+.image-generator-preview.loading::before {
     content: '';
+    position: absolute;
+    height: calc(100% + 15px); /* Compensate for margin */
+    width: calc(100% + 15px);
+    background-image: conic-gradient(from var(--angle), #fe2c55, #4c00ff, #00f2ea, #fe2c55);    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: -1;
+    border-radius: 10px;
+    animation: spin 3s linear infinite;
+}
+
+.image-generator-preview.loading::before {
+    filter: blur(1.5rem);
+    opacity: 0.5;
+}
+
+/* Remove original non-loading specific rules */
+.image-generator-preview::after,
+.image-generator-preview::before {
+    display: none;
+}
+
+.generated-image {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.image-generator-loading {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, 
-        transparent, 
-        transparent 50%, 
-        rgba(254, 44, 85, 0.8) 50%, /* TikTok pink #fe2c55 with opacity */
-        rgba(254, 44, 85, 0.8)
-    );
-    background-size: 200% 100%;
-    animation: border-trace 2s linear infinite;
-    box-shadow: 0 0 10px rgba(254, 44, 85, 0.4);
-    z-index: 1000;
-    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #121212;
 }
 
-@keyframes border-trace {
-    0% {
-        background-position: 100% 0;
-        opacity: 0;
-    }
-    25% {
-        opacity: 1;
-    }
-    75% {
-        opacity: 1;
-    }
-    100% {
-        background-position: -100% 0;
-        opacity: 0;
-    }
-}
-
-/* Add loading state class */
 .image-generator-preview.loading::before {
     display: block;
 }
@@ -367,252 +291,157 @@ img {
     display: none;
 }
 
-.image-generator-preview {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-}
-
-.image-generator-loading {
-    color: #ffffff;
-    text-align: center;
-    padding: 20px;
-}
-
-/* Remove generic selectors */
-input[type="text"],
-textarea {
-    display: none;
-}
-
-/* Aspect Ratio Controls */
-.image-generator-aspect-section {
-    padding: 12px; /* Reduced padding in sections */
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-    margin-bottom: 8px;
-}
-
-.image-generator-aspect-buttons {
-    display: flex;
-    gap: 8px; /* Adjusted gap */
-    margin-top: 8px; /* Adjusted margin */
-}
-
-.image-generator-aspect-btn {
-    flex: 1; /* Adjusted flex property */
-    padding: 8px 12px;
-    background: #2f2f2f;
-    border: 1px solid #444;
-    border-radius: 4px;
-    color: #ffffff;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.image-generator-aspect-btn.selected {
-    background: #fe2c55;
-    border-color: #fe2c55;
-}
-
-/* Preview Section */
-.image-generator-preview {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.generated-image {
-    max-width: 100%;
-    max-height: 80vh;
-    object-fit: contain;
-}
-
-/* Loading State */
-.image-generator-loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-}
-
-.loading-text {
-    color: #ffffff;
-    font-size: 16px;
-}
-
+/* Error Text */
 .error-text {
     color: #fe2c55;
     text-align: center;
     padding: 20px;
 }
 
-/* Remove any display: none properties */
-input[type="text"],
-textarea,
-button {
-    display: block;
-}
-
-.image-generator-preview-container {
-    position: relative;
+/* Input Styles */
+.image-generator-input {
     width: 100%;
-    height: 100%;
-    border-radius: 8px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    padding: 8px;
+    background: #2f2f2f;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: white;
+    font-size: 14px;
+    transition: all 0.2s ease;
 }
 
-.image-generator-preview-container.loading::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        to right,
-        transparent 0%,
-        rgba(254, 44, 85, 0.8) 25%,
-        rgba(254, 44, 85, 0.8) 75%,
-        transparent 100%
-    );
-    background-size: 200% 100%;
-    border: 2px solid transparent;
-    border-image: linear-gradient(
-        90deg,
-        transparent,
-        rgba(254, 44, 85, 0.8),
-        transparent
-    ) 1;
-    animation: shine 2s linear infinite;
-    z-index: 1;
-    border-radius: 8px;
-    box-shadow: 0 0 15px rgba(254, 44, 85, 0.2);
+.image-generator-input:focus {
+    outline: none;
+    border-color: #fe2c55;
+    background: #363636;
 }
 
-@keyframes shine {
-    0% {
-        background-position: -200% 0;
-    }
-    100% {
-        background-position: 200% 0;
-    }
+.image-generator-input::placeholder {
+    color: #8e8e8e;
 }
 
-.image-generator-loading {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 2;
+/* Button Styles */
+.image-generator-creative-btn:hover,
+.image-generator-upscale-btn:hover {
+    background: #363636;
 }
 
-.loading-spinner {
-    position: relative;
-    width: 160px;
-    height: 160px;
-    margin-bottom: 80px;
+.image-generator-creative-btn.selected,
+.image-generator-upscale-btn.selected {
+    background: #fe2c55;
+    border-color: #fe2c55;
 }
 
-.loading-text {
-    position: absolute;
-    top: 60%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #ffffff;
-    font-size: 18px;
-    font-weight: 500;
-    text-align: center;
-    z-index: 3;
-    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-}
-
-.loading-spinner::before,
-.loading-spinner::after {
-    content: '';
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    border: 4px solid transparent;
-    border-top-color: #fe2c55;
-    animation: spin1 2s linear infinite;
-}
-
-.loading-spinner::before {
-    border-width: 2px;
-    animation: spin2 1s linear infinite;
-}
-
-.loading-spinner::after {
-    border-width: 4px;
-    animation-duration: 3s;
-    box-shadow: 0 0 20px #fe2c55;
-}
-
-.loading-spinner-inner {
-    width: 80px;
-    height: 80px;
-    background: linear-gradient(45deg, #fe2c55, #ff425f);
-    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-.loading-text {
-    color: #ffffff;
-    font-size: 16px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-top: 64px;
-    animation: glow 1.5s ease-in-out infinite alternate;
-    z-index: 1000;
-}
-
-@keyframes spin1 {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-@keyframes spin2 {
-    0% { transform: rotate(360deg); }
-    100% { transform: rotate(0deg); }
-}
-
-@keyframes pulse {
-    0%, 100% { transform: scale(0.8); opacity: 0.5; }
-    50% { transform: scale(1.1); opacity: 1; }
-}
-
-@keyframes glow {
-    from { text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #fe2c55; }
-    to { text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px #fe2c55; }
-}
-
+.image-generator-creative-btn,
 .image-generator-upscale-btn {
     flex: 1;
     padding: 8px 12px;
     background: #2f2f2f;
     border: 1px solid #444;
     border-radius: 4px;
-    color: #ffffff;
+    color: white;
     font-size: 13px;
     cursor: pointer;
     transition: background-color 0.2s ease;
 }
 
-.image-generator-upscale-btn:hover {
-    background: #3d3d3d;
-    border-color: #555;
+/* Common Button Styles */
+.image-generator-submit-btn,
+.image-generator-creative-btn,
+.image-generator-upscale-btn,
+.image-generator-aspect-btn {
+    padding: 6px 16px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 4px;
+    border: none;
+    background-color: #2f2f2f;
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
 }
 
-.image-generator-upscale-btn.selected {
-    background: #fe2c55;
-    border-color: #fe2c55;
+/* Hover States */
+.image-generator-submit-btn:hover:not(.disabled),
+.image-generator-creative-btn:hover,
+.image-generator-upscale-btn:hover,
+.image-generator-aspect-btn:hover {
+    background-color: #363636;
 }
 
+/* Selected States */
+.image-generator-creative-btn.selected,
+.image-generator-upscale-btn.selected,
+.image-generator-aspect-btn.selected {
+    background-color: #fe2c55;
+    color: #ffffff;
+}
+
+/* Submit Button Specific */
+.image-generator-submit-btn {
+    background-color: #fe2c55;
+    width: 100%;
+    padding: 8px;
+    margin-top: auto;
+}
+
+.image-generator-submit-btn:hover:not(.disabled) {
+    background-color: #ef2950;
+}
+
+.image-generator-submit-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #2f2f2f;
+}
+
+@property --angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+
+  /* Set up the animation to rotate the --angle property */
+  @keyframes loading-text {
+    0% {
+      --angle: 0deg;
+    }
+    100% {
+      --angle: 360deg;
+    }
+  }
+
+.loading-text {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2em;
+    font-weight: bold;
+    color: white;
+    white-space: nowrap;
+    animation: loading-text 4s infinite linear;
+    animation-fill-mode: backwards;
+    animation-play-state: running;
+    max-width: 100%;
+    padding: 0 20px;
+}
+
+.character {
+    color: white;
+    font-size: 3em;
+    animation: loading-text 4s infinite linear;
+    animation-fill-mode: backwards;
+    animation-play-state: running;
+    transform: translateY(calc(sin(var(--angle)) * 100px)) scale(calc(cos(var(--angle)) * 0.5 + 0.5));
+}
+
+.placeholder-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}

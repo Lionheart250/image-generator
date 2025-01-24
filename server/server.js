@@ -430,6 +430,34 @@ app.get('/images', optionalAuthenticateToken, (req, res) => {
     });
 });
 
+app.get('/images/:id', authenticateTokenWithAutoRefresh, (req, res) => {
+    const imageId = req.params.id;
+    console.log(`Request for image ID: ${imageId}`); // Debug log for image ID
+
+    db.get(
+        `SELECT users.username, users.profile_picture, users.id AS user_id
+         FROM images 
+         JOIN users ON images.user_id = users.id 
+         WHERE images.id = ?`,
+        [imageId],
+        (err, row) => {
+            if (err) {
+                console.error("Database error:", err);
+                return res.status(500).json({ error: "An unexpected error occurred." });
+            }
+
+            console.log(`Query result for image ID ${imageId}:`, row); // Log the result
+
+            if (!row) {
+                return res.status(404).json({ error: "Image not found" });
+            }
+
+            res.json(row);
+        }
+    );
+});
+
+
 // Like an Image
 app.post('/add_like', (req, res) => {
     const { userId, imageId } = req.body;
@@ -822,7 +850,34 @@ app.post('/update_profile', authenticateTokenWithAutoRefresh, (req, res) => {
     });
 });
 
+app.get('/user_images/:userId', authenticateTokenWithAutoRefresh, (req, res) => {
+    console.log('Request params:', req.params); // Debug log
+    const userId = req.params.userId;
+
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    db.all(
+        `SELECT images.*, users.username, users.profile_picture 
+         FROM images 
+         JOIN users ON images.user_id = users.id 
+         WHERE user_id = ? 
+         ORDER BY created_at DESC`,
+        [userId],
+        (err, rows) => {
+            if (err) {
+                console.error('Error fetching user images:', err);
+                return res.status(500).json({ error: 'Failed to fetch user images' });
+            }
+            console.log('Found images for user:', rows?.length); // Debug log
+            res.json({ images: rows });
+        }
+    );
+});
+
 // Start server
 app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
 });
+

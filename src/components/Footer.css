@@ -5,8 +5,9 @@
     position: fixed;
     bottom: 0;
     width: 100%;
-    z-index: 10;
-    transition: transform 0.3s ease;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    color: #ffffff;
 }
 
 .footer.hidden {
@@ -65,4 +66,53 @@
 /* Add margin to main content to prevent footer overlap */
 .main-content {
     margin-bottom: 80px;
+}
+
+.bottom-footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    padding: 16px;
+    transform: translateY(100%);
+    z-index: 1000;
+
+}
+
+.bottom-footer.visible {
+    transform: translateY(0);
+}
+
+.side-footer {
+    position: fixed;
+    right: 0;
+    top: 60px;
+    bottom: 0;
+    width: 240px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+
+}
+
+.side-footer .footer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.side-footer .footer-links {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.side-footer a {
+    color: #ffffff;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.side-footer a:hover {
+    color: #fe2c55;
 }
