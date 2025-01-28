@@ -9,7 +9,7 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [refreshToken, setRefreshToken] = useState(localStorage.getItem('refreshToken'));
 
-    const decodeAndSetUser = (token) => {
+    const decodeAndSetUser = React.useCallback((token) => {
         try {
             const decodedToken = jwtDecode(token);
             setUser({
@@ -21,16 +21,16 @@ export const AuthProvider = ({ children }) => {
             console.error('Failed to decode token:', error);
             logout();
         }
-    };
+    }, []);
 
-    const isTokenExpired = (token) => {
+    const isTokenExpired = React.useCallback((token) => {
         try {
             const { exp } = jwtDecode(token);
             return Date.now() >= exp * 1000;
         } catch {
             return true;
         }
-    };
+    }, []);
 
     const login = (newToken, newRefreshToken) => {
         localStorage.setItem('token', newToken);
@@ -40,13 +40,13 @@ export const AuthProvider = ({ children }) => {
         decodeAndSetUser(newToken);
     };
 
-    const logout = () => {
+    const logout = React.useCallback(() => {
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
         setToken(null);
         setRefreshToken(null);
         setUser(null);
-    };
+    }, []);
 
     useEffect(() => {
         const refreshAuthToken = async () => {
@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }) => {
         };
 
         refreshAuthToken();
-    }, [token, refreshToken]);
+    }, [token, refreshToken, decodeAndSetUser, isTokenExpired]);
 
     return (
         <AuthContext.Provider value={{ user, token, login, logout }}>

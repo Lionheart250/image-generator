@@ -25,13 +25,15 @@ const Header = () => {
     const moreButtonRef = useRef(null);
     const [expandedSection, setExpandedSection] = useState(null);
 
+    // Profile picture fetch effect
     useEffect(() => {
         const fetchProfilePicture = async () => {
             if (user) {
                 try {
-                    const token = localStorage.getItem('token');
-                    const response = await fetch(`http://localhost:3000/user_profile/${user.id}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
+                    const response = await fetch('/profile_picture', {
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        }
                     });
                     const data = await response.json();
                     setHeaderProfilePic(data.profile_picture || '/default-avatar.png');
@@ -41,13 +43,14 @@ const Header = () => {
             }
         };
         fetchProfilePicture();
-    }, [user]);
+    }, [user]); // Dependency is correct
 
+    // Header position effect
     useEffect(() => {
         const topHeaderPages = ['/'];
         const shouldBeTop = topHeaderPages.includes(location.pathname);
         setHeaderPosition(shouldBeTop ? 'top' : 'side');
-    }, [location]);
+    }, [location.pathname]); // Add specific pathname dependency
 
     const handleLogout = () => {
         logout();
@@ -64,6 +67,7 @@ const Header = () => {
         setIsDropdownOpen(!isDropdownOpen);
     };
 
+    // Click outside effect
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -80,7 +84,7 @@ const Header = () => {
         return () => {
             document.removeEventListener('click', handleClickOutside);
         };
-    }, [isMoreMenuOpen]);
+    }, [isMoreMenuOpen]); // Add isMoreMenuOpen dependency
 
     return (
         <>
