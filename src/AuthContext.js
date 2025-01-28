@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
 
@@ -9,7 +9,15 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [refreshToken, setRefreshToken] = useState(localStorage.getItem('refreshToken'));
 
-    const decodeAndSetUser = React.useCallback((token) => {
+    const clearAuth = useCallback(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        setToken(null);
+        setRefreshToken(null);
+        setUser(null);
+    }, []);
+
+    const decodeAndSetUser = useCallback((token) => {
         try {
             const decodedToken = jwtDecode(token);
             setUser({
@@ -19,11 +27,11 @@ export const AuthProvider = ({ children }) => {
             });
         } catch (error) {
             console.error('Failed to decode token:', error);
-            logout();
+            clearAuth();
         }
-    }, []);
+    }, [clearAuth]);
 
-    const isTokenExpired = React.useCallback((token) => {
+    const isTokenExpired = useCallback((token) => {
         try {
             const { exp } = jwtDecode(token);
             return Date.now() >= exp * 1000;
@@ -32,21 +40,17 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    const login = (newToken, newRefreshToken) => {
+    const login = useCallback((newToken, newRefreshToken) => {
         localStorage.setItem('token', newToken);
         localStorage.setItem('refreshToken', newRefreshToken);
         setToken(newToken);
         setRefreshToken(newRefreshToken);
         decodeAndSetUser(newToken);
-    };
+    }, [decodeAndSetUser]);
 
-    const logout = React.useCallback(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        setToken(null);
-        setRefreshToken(null);
-        setUser(null);
-    }, []);
+    const logout = useCallback(() => {
+        clearAuth();
+    }, [clearAuth]);
 
     useEffect(() => {
         const refreshAuthToken = async () => {
@@ -57,7 +61,7 @@ export const AuthProvider = ({ children }) => {
                     login(newToken, newRefreshToken);
                 } catch (error) {
                     console.error('Failed to refresh token:', error);
-                    logout();
+                    clearAuth();
                 }
             } else if (token) {
                 decodeAndSetUser(token);
