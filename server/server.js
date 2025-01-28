@@ -4,7 +4,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg'); // Add PostgreSQL import
 const axios = require('axios');
 const multer = require('multer'); // Add multer for file uploads
 const path = require('path');
@@ -24,27 +24,40 @@ if (!fs.existsSync(uploadDir)){
 }
 
 // Database setup
-const db = new sqlite3.Database('./anime_ai.db', (err) => {
+console.log('Environment variables:', {
+    DB_USER: process.env.DB_USER,
+    DB_HOST: process.env.DB_HOST,
+    DB_NAME: process.env.DB_NAME,
+    DB_PORT: process.env.DB_PORT
+});
+
+const pool = new Pool({
+    user: 'jack',
+    host: 'localhost',
+    database: 'anime_ai_db',
+    password: process.env.DB_PASSWORD,
+    port: 5432
+});
+
+pool.query('SELECT NOW()', (err, res) => {
     if (err) {
-        console.error('Database opening error: ', err);
+        console.error('Database connection failed:', err);
+        console.error('Connection details:', {
+            user: 'jack',
+            host: 'localhost',
+            database: 'anime_ai_db',
+            port: 5432
+        });
+    } else {
+        console.log('Connected to PostgreSQL database');
     }
 });
 
-db.serialize(() => {
-    db.run("PRAGMA foreign_keys = ON");
-    db.run(`
-        CREATE TABLE IF NOT EXISTS refresh_tokens (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            token TEXT,
-            expires_at TEXT,
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    `);
-});
+// Reset the sequence for refresh_tokens
+pool.query("SELECT setval('refresh_tokens_id_seq', (SELECT MAX(id) FROM refresh_tokens));");
 
 // Middleware
-app.use(cors({ origin: 'http://localhost:3001' })); // Allow requests from frontend
+app.use(cors({ origin: process.env.CORS_ORIGIN })); // Allow requests from frontend
 app.use(bodyParser.json());
 
 // Add request logging middleware
@@ -54,41 +67,26 @@ app.use((req, res, next) => {
 });
 
 // Secret key for JWT
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
-const REFRESH_SECRET = process.env.REFRESH_SECRET || 'your_refresh_secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const REFRESH_SECRET = process.env.REFRESH_SECRET;
 
 // Middleware to verify and refresh tokens
 const authenticateTokenWithAutoRefresh = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    if (!token) {
+        return res.status(401).json({ error: 'No token provided' });
+    }
 
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
-        if (err) {
-            if (err.name === 'TokenExpiredError') {
-                // Token has expired, attempt to refresh it
-                const refreshToken = req.headers['x-refresh-token'];
-                if (!refreshToken) return res.status(401).json({ error: 'Unauthorized' });
-
-                jwt.verify(refreshToken, REFRESH_SECRET, (err, decoded) => {
-                    if (err) return res.status(403).json({ error: 'Forbidden' });
-
-                    const newAccessToken = jwt.sign({ userId: decoded.userId }, JWT_SECRET, { expiresIn: '15m' });
-                    res.setHeader('x-access-token', newAccessToken);
-                    req.user = { id: decoded.userId };
-                    next();
-                });
-            } else {
-                console.error('Token verification error:', err);
-                return res.status(401).json({ error: 'Invalid token' });
-            }
-        } else {
-            req.user = { id: decoded.userId };
-            console.log('Authenticated user:', req.user);
-            next();
-        }
-    });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded;
+        next();
+    } catch (err) {
+        console.error('Token verification error:', err);
+        return res.status(403).json({ error: 'Invalid token' });
+    }
 };
 
 // Middleware to optionally verify JWT
@@ -134,62 +132,60 @@ app.post('/register', async (req, res) => {
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        db.run(
-            `INSERT INTO users (username, email, password) VALUES (?, ?, ?)`,
-            [username, email, hashedPassword],
-            function(err) {
-                if (err) {
-                    console.error('Error inserting user:', err);
-                    return res.status(500).json({ error: 'User registration failed' });
-                }
-                res.status(201).json({ message: 'User registered successfully' });
-            }
+        const result = await pool.query(
+            'INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id',
+            [username, hashedPassword, email]
         );
+        res.json({ id: result.rows[0].id });
     } catch (error) {
-        console.error('Error during registration:', error);
-        res.status(500).json({ error: 'User registration failed' });
+        res.status(500).json({ error: 'Registration failed' });
     }
 });
 
 // User login
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
+    console.log('Login attempt:', { email });
 
     try {
-        db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-            if (err) {
-                console.error('Error fetching user:', err);
-                return res.status(500).json({ error: 'Login failed' });
-            }
-            if (!user) {
-                return res.status(400).json({ error: 'Invalid email or password' });
-            }
+        const result = await pool.query(
+            'SELECT * FROM users WHERE email = $1',
+            [email]
+        );
+        console.log('User found:', result.rows[0] ? 'yes' : 'no');
+        
+        const user = result.rows[0];
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid email or password' });
+        }
 
-            const isPasswordValid = await bcrypt.compare(password, user.password);
-            if (!isPasswordValid) {
-                return res.status(400).json({ error: 'Invalid email or password' });
-            }
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        console.log('Password valid:', isPasswordValid);
 
-            const role = user.role; // Ensure the role is fetched from the user table
-            const token = jwt.sign({ userId: user.id, username: user.username, role }, JWT_SECRET, { expiresIn: '7d' });
-            const refreshToken = jwt.sign({ userId: user.id, username: user.username, role }, REFRESH_SECRET, { expiresIn: '30d' });
+        if (!isPasswordValid) {
+            return res.status(400).json({ error: 'Invalid email or password' });
+        }
 
-            // Save the refresh token in the database
-            const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + 7); // 7 days validity
+        console.log('JWT_SECRET exists:', !!JWT_SECRET);
+        console.log('REFRESH_SECRET exists:', !!REFRESH_SECRET);
 
-            db.run(
-                `INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)`,
-                [user.id, refreshToken, expiresAt.toISOString()],
-                (err) => {
-                    if (err) {
-                        console.error('Error saving refresh token:', err);
-                        return res.status(500).json({ error: 'Login failed' });
-                    }
-                    res.json({ token, refreshToken, userId: user.id, message: 'Login successful' });
-                }
-            );
-        });
+        const role = user.role;
+        const token = jwt.sign({ userId: user.id, username: user.username, role }, JWT_SECRET, { expiresIn: '7d' });
+        const refreshToken = jwt.sign({ userId: user.id, username: user.username, role }, REFRESH_SECRET, { expiresIn: '30d' });
+
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        // Delete existing refresh tokens for user
+        await pool.query('DELETE FROM refresh_tokens WHERE user_id = $1', [user.id]);
+
+        // Insert new refresh token
+        await pool.query(
+            'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+            [user.id, refreshToken, expiresAt]
+        );
+
+        res.json({ token, refreshToken, userId: user.id, message: 'Login successful' });
     } catch (error) {
         console.error('Error during login:', error);
         res.status(500).json({ error: 'Login failed' });
@@ -197,73 +193,76 @@ app.post('/login', async (req, res) => {
 });
 
 // Refresh token
-app.post('/refresh', (req, res) => {
+app.post('/refresh', async (req, res) => {
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
         return res.status(400).json({ error: 'Refresh token is required' });
     }
 
-    db.get(
-        `SELECT * FROM refresh_tokens WHERE token = ?`,
-        [refreshToken],
-        (err, row) => {
-            if (err) {
-                console.error('Error fetching refresh token:', err);
-                return res.status(500).json({ error: 'Internal server error' });
-            }
+    try {
+        const result = await pool.query(
+            'SELECT rt.*, u.username, u.role FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id WHERE rt.token = $1',
+            [refreshToken]
+        );
 
-            if (!row) {
-                return res.status(403).json({ error: 'Invalid refresh token' });
-            }
-
-            const { user_id, expires_at } = row;
-
-            // Check if token has expired
-            if (new Date(expires_at) < new Date()) {
-                db.run(
-                    `DELETE FROM refresh_tokens WHERE token = ?`,
-                    [refreshToken],
-                    () => {}
-                );
-                return res.status(403).json({ error: 'Refresh token expired' });
-            }
-
-            // Issue new tokens
-            jwt.verify(refreshToken, REFRESH_SECRET, (err, user) => {
-                if (err) {
-                    return res.status(403).json({ error: 'Invalid refresh token' });
-                }
-
-                const newToken = jwt.sign({ userId: user_id }, JWT_SECRET, { expiresIn: '1h' });
-                const newRefreshToken = jwt.sign({ userId: user_id }, REFRESH_SECRET, { expiresIn: '7d' });
-
-                // Save the new refresh token in the database
-                const expiresAt = new Date();
-                expiresAt.setDate(expiresAt.getDate() + 7);
-
-                db.run(
-                    `INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)`,
-                    [user_id, newRefreshToken, expiresAt.toISOString()],
-                    (err) => {
-                        if (err) {
-                            console.error('Error storing new refresh token:', err);
-                            return res.status(500).json({ error: 'Internal server error' });
-                        }
-
-                        // Delete the old token
-                        db.run(
-                            `DELETE FROM refresh_tokens WHERE token = ?`,
-                            [refreshToken],
-                            () => {}
-                        );
-
-                        res.json({ token: newToken, refreshToken: newRefreshToken });
-                    }
-                );
-            });
+        if (result.rows.length === 0) {
+            return res.status(403).json({ error: 'Invalid refresh token' });
         }
-    );
+
+        const { user_id, expires_at, username, role } = result.rows[0];
+
+        // Check if token has expired
+        if (new Date(expires_at) < new Date()) {
+            await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+            return res.status(403).json({ error: 'Refresh token expired' });
+        }
+
+        // Generate new tokens
+        const newToken = jwt.sign(
+            { userId: user_id, username, role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        const newRefreshToken = jwt.sign(
+            { userId: user_id, username, role },
+            process.env.REFRESH_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        // Update refresh token in database
+        const newExpiresAt = new Date();
+        newExpiresAt.setDate(newExpiresAt.getDate() + 7);
+
+        await pool.query(
+            'UPDATE refresh_tokens SET token = $1, expires_at = $2 WHERE user_id = $3 AND token = $4',
+            [newRefreshToken, newExpiresAt, user_id, refreshToken]
+        );
+
+        res.json({ token: newToken, refreshToken: newRefreshToken });
+    } catch (error) {
+        console.error('Refresh token error:', error);
+        res.status(500).json({ error: 'Token refresh failed' });
+    }
+});
+
+// Refresh token route
+app.post('/refresh-token', async (req, res) => {
+    const { refreshToken } = req.body;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM refresh_tokens WHERE token = $1 AND expires_at > NOW()',
+            [refreshToken]
+        );
+        if (result.rows.length === 0) {
+            return res.status(403).json({ error: 'Invalid refresh token' });
+        }
+        // ...existing token generation code...
+    } catch (error) {
+        console.error('Refresh token error:', error);
+        res.status(500).json({ error: 'Token refresh failed' });
+    }
 });
 
 // Logout route (optional for clearing refresh tokens)
@@ -274,8 +273,8 @@ app.post('/logout', (req, res) => {
         return res.status(400).json({ error: 'Refresh token is required' });
     }
 
-    db.run(
-        `DELETE FROM refresh_tokens WHERE token = ?`,
+    pool.query(
+        `DELETE FROM refresh_tokens WHERE token = $1`,
         [refreshToken],
         (err) => {
             if (err) {
@@ -289,8 +288,59 @@ app.post('/logout', (req, res) => {
 
 // --- Image Routes ---
 
+// Fetch all images
+app.get('/images', optionalAuthenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT i.*, u.username, u.profile_picture 
+            FROM images i
+            LEFT JOIN users u ON i.user_id = u.id 
+            ORDER BY i.created_at DESC`
+        );
+        res.json({ images: result.rows });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Fetch single image
+app.get('/images/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
+    const imageId = parseInt(req.params.id);
+    
+    if (isNaN(imageId)) {
+        return res.status(400).json({ error: "Invalid image ID" });
+    }
+
+    try {
+        const result = await pool.query(`
+            SELECT 
+                i.*,
+                u.username, 
+                u.profile_picture, 
+                u.id AS user_id
+            FROM images i
+            JOIN users u ON i.user_id = u.id 
+            WHERE i.id = $1
+        `, [imageId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Image not found" });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({ error: "An unexpected error occurred" });
+    }
+});
+
+// Generate image
 app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) => {
-    console.log('Request user:', req.user); // Debugging line to check user data
+    const userId = req.user.userId;
+    if (!userId) {
+        return res.status(401).json({ error: 'User ID not found' });
+    }
 
     const { 
         prompt, 
@@ -306,8 +356,6 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
         hires_height 
     } = req.body;
 
-    const userId = req.user.id; // Extract userId from the authenticated user
-
     // Validate required fields
     if (!prompt) {
         return res.status(400).json({ error: 'Prompt is required' });
@@ -322,7 +370,6 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
         return res.status(400).json({ error: 'Width and Height must be between 256 and 2048' });
     }
 
-    // Validate HiRes parameters only if enable_hr is true
     if (enable_hr) {
         if (typeof denoising_strength !== 'number' || denoising_strength < 0 || denoising_strength > 1) {
             return res.status(400).json({ error: 'Denoising strength must be a number between 0 and 1' });
@@ -331,11 +378,10 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
             return res.status(400).json({ error: 'Upscale factor must be between 1 and 4' });
         }
         if (hires_width < 256 || hires_width > 2048 || hires_height < 256 || hires_height > 2048) {
-            return res.status(400).json({ error: 'HiRes Width and Height must be between 256 and 2048' });
+            return res.status(400).json({ error: 'HiRes dimensions must be between 256 and 2048' });
         }
     }
 
-    // Prepare payload for the image generation API
     const payload = {
         prompt,
         negative_prompt: negativePrompt,
@@ -343,11 +389,11 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
         steps,
         width,
         height,
-        enable_hr, // Use the value from the request to determine HiRes fix
-        denoising_strength: enable_hr ? denoising_strength : undefined, // Only include if HiRes is enabled
-        upscale_factor: enable_hr ? upscale_factor : undefined, // Only include if HiRes is enabled
-        hires_width: enable_hr ? hires_width : undefined, // Only include if HiRes is enabled
-        hires_height: enable_hr ? hires_height : undefined // Only include if HiRes is enabled
+        enable_hr,
+        denoising_strength: enable_hr ? denoising_strength : undefined,
+        upscale_factor: enable_hr ? upscale_factor : undefined,
+        hires_width: enable_hr ? hires_width : undefined,
+        hires_height: enable_hr ? hires_height : undefined
     };
 
     try {
@@ -357,7 +403,6 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
             },
         });
 
-        // Check if the response contains an image
         if (response.data && response.data.images && response.data.images[0]) {
             const imageUrl = `data:image/png;base64,${response.data.images[0]}`;
 
@@ -376,176 +421,113 @@ app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) =
                 hires_height
             });
 
-            if (!userId) {
-                console.error('Missing user_id');
-                return res.status(400).json({ error: 'User ID is required' });
-            }
+            const query = `
+                INSERT INTO images (
+                    user_id, image_url, prompt, negative_prompt, 
+                    cfg_scale, steps, width, height, 
+                    enable_hires_fix, denoising_strength, 
+                    upscale_factor, hires_width, hires_height,
+                    categories
+                ) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                RETURNING id`;
 
-            // Insert the image data into the database
-            db.run(
-                'INSERT INTO images (user_id, image_url, prompt, negative_prompt, cfg_scale, steps, width, height, enable_hires_fix, denoising_strength, upscale_factor, hires_width, hires_height) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
-                [
-                    Number(userId), 
-                    imageUrl, 
-                    prompt || '', 
-                    negativePrompt || '', 
-                    Number(cfgScale), 
-                    Number(steps), 
-                    Number(width), 
-                    Number(height),
-                    enable_hr, // Save HiRes flag
-                    enable_hr ? denoising_strength : null, // Save denoising strength if HiRes is enabled
-                    enable_hr ? upscale_factor : null, // Save upscale factor if HiRes is enabled
-                    enable_hr ? hires_width : null, // Save HiRes width if HiRes is enabled
-                    enable_hr ? hires_height : null // Save HiRes height if HiRes is enabled
-                ], 
-                function(err) {
-                    if (err) {
-                        console.error('Database error:', err);
-                        return res.status(500).json({ error: 'Failed to save image' });
-                    }
-                    res.json({ image: imageUrl });
-                }
-            );
+            await pool.query(query, [
+                parseInt(userId) || null,  // Ensure integer or null
+                imageUrl,
+                prompt || '',
+                negativePrompt || '',
+                parseInt(cfgScale) || null,
+                parseInt(steps) || null,
+                parseInt(width) || null,
+                parseInt(height) || null,
+                enable_hr ? 1 : 0,
+                parseFloat(denoising_strength) || null,
+                parseInt(upscale_factor) || null,
+                parseInt(hires_width) || null,
+                parseInt(hires_height) || null,
+                []
+            ]);
+
+            res.json({ image: imageUrl });
         } else {
             res.status(500).json({ error: 'No image generated' });
         }
     } catch (error) {
         console.error('Error generating image:', error);
-        res.status(500).json({ error: `Failed to connect to API: ${error.message}` });
+        res.status(500).json({ error: `Failed to generate image: ${error.message}` });
     }
 });
 
-
-
-
-// Fetch images from the database
-app.get('/images', optionalAuthenticateToken, (req, res) => {
-    db.all('SELECT * FROM images', [], (err, rows) => {
-        if (err) {
-            console.error('Error fetching images:', err);
-            return res.status(500).json({ error: 'Failed to fetch images' });
-        }
-        res.json({ images: rows });
-    });
-});
-
-app.get('/images/:id', authenticateTokenWithAutoRefresh, (req, res) => {
-    const imageId = req.params.id;
-    console.log(`Request for image ID: ${imageId}`); // Debug log for image ID
-
-    db.get(
-        `SELECT users.username, users.profile_picture, users.id AS user_id
-         FROM images 
-         JOIN users ON images.user_id = users.id 
-         WHERE images.id = ?`,
-        [imageId],
-        (err, row) => {
-            if (err) {
-                console.error("Database error:", err);
-                return res.status(500).json({ error: "An unexpected error occurred." });
-            }
-
-            console.log(`Query result for image ID ${imageId}:`, row); // Log the result
-
-            if (!row) {
-                return res.status(404).json({ error: "Image not found" });
-            }
-
-            res.json(row);
-        }
-    );
-});
-
-
 // Like an Image
-app.post('/add_like', (req, res) => {
+app.post('/add_like', authenticateTokenWithAutoRefresh, async (req, res) => {
     const { userId, imageId } = req.body;
 
-    const insertQuery = `
-        INSERT INTO likes (user_id, image_id)
-        VALUES (?, ?);
-    `;
-
-    // Insert the like
-    db.run(insertQuery, [userId, imageId], function (err) {
-        if (err) {
-            if (err.code === 'SQLITE_CONSTRAINT') {
-                return res.status(400).json({ error: 'You have already liked this image' });
-            }
-            console.error('Error adding like:', err);
-            return res.status(500).json({ error: 'Failed to add like' });
-        }
-
-        // Fetch the like details (optional, for confirmation or UI updates)
-        const fetchQuery = `
-            SELECT 
-                likes.id AS like_id,
-                likes.image_id,
-                likes.created_at,
-                users.username
-            FROM 
-                likes
-            INNER JOIN 
-                users
-            ON 
-                likes.user_id = users.id
-            WHERE 
-                likes.id = ?;
-        `;
-
-        db.get(fetchQuery, [this.lastID], (err, row) => {
-            if (err) {
-                console.error('Error fetching like details:', err);
-                return res.status(500).json({ error: 'Failed to fetch like details' });
-            }
-
-            res.status(201).json(row); // Respond with the new like details
-        });
-    });
+    try {
+        await pool.query(
+            'INSERT INTO likes (user_id, image_id) VALUES ($1, $2)',
+            [userId, imageId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to add like' });
+    }
 });
 
+// Like image
+app.post('/like_image', authenticateTokenWithAutoRefresh, async (req, res) => {
+    const { imageId } = req.body;
+    const userId = req.user.userId;
+    try {
+        await pool.query(
+            'INSERT INTO likes (user_id, image_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [userId, imageId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Like error:', error);
+        res.status(500).json({ error: 'Failed to like image' });
+    }
+});
 
 // Get Likes for an Image
 app.get('/image_likes/:imageId', authenticateTokenWithAutoRefresh, (req, res) => {
     const { imageId } = req.params;
 
-    db.all(
-        `SELECT COUNT(*) as likeCount FROM likes WHERE image_id = ?`,
+    pool.query(
+        `SELECT COUNT(*) as likeCount FROM likes WHERE image_id = $1`,
         [imageId],
-        (err, rows) => {
+        (err, result) => {
             if (err) {
                 console.error('Error fetching likes:', err);
                 return res.status(500).json({ error: 'Failed to fetch likes' });
             }
-            res.json({ imageId, likeCount: rows[0].likeCount });
+            res.json({ imageId, likeCount: result.rows[0].likecount });
         }
     );
 });
 
 // Fetch likes for a specific image
-app.get('/fetch_likes', authenticateTokenWithAutoRefresh, (req, res) => {
+app.get('/fetch_likes', authenticateTokenWithAutoRefresh, async (req, res) => {
     const imageId = req.query.id;
     const userId = req.user.id;
 
-    db.get('SELECT COUNT(*) AS likes FROM likes WHERE image_id = ?', [imageId], (err, likesRow) => {
-        if (err) {
-            console.error('Error fetching likes:', err);
-            return res.status(500).json({ error: 'Failed to fetch likes' });
-        }
-
-        db.get('SELECT 1 FROM likes WHERE image_id = ? AND user_id = ?', [imageId, userId], (err, userLikeRow) => {
-            if (err) {
-                console.error('Error checking user like:', err);
-                return res.status(500).json({ error: 'Failed to check user like' });
-            }
-
-            res.json({
-                likes: likesRow.likes,
-                userHasLiked: !!userLikeRow,
-            });
+    try {
+        const likesCount = await pool.query(
+            'SELECT COUNT(*) FROM likes WHERE image_id = $1',
+            [imageId]
+        );
+        const userLiked = await pool.query(
+            'SELECT EXISTS(SELECT 1 FROM likes WHERE image_id = $1 AND user_id = $2)',
+            [imageId, userId]
+        );
+        res.json({
+            likes: parseInt(likesCount.rows[0].count),
+            userHasLiked: userLiked.rows[0].exists
         });
-    });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch likes' });
+    }
 });
 
 app.delete('/remove_like', (req, res) => {
@@ -553,11 +535,11 @@ app.delete('/remove_like', (req, res) => {
 
     const deleteQuery = `
         DELETE FROM likes
-        WHERE user_id = ? AND image_id = ?;
+        WHERE user_id = $1 AND image_id = $2;
     `;
 
     // Execute the delete query
-    db.run(deleteQuery, [userId, imageId], function (err) {
+    pool.query(deleteQuery, [userId, imageId], function (err) {
         if (err) {
             console.error('Error removing like:', err);
             return res.status(500).json({ error: 'Failed to remove like' });
@@ -579,11 +561,13 @@ app.delete('/delete_image/:imageId', authenticateTokenWithAutoRefresh, (req, res
     console.log('Delete request for image:', imageId);
 
     // First verify image exists
-    db.get('SELECT * FROM images WHERE id = ?', [imageId], (err, row) => {
+    pool.query('SELECT * FROM images WHERE id = $1', [imageId], (err, result) => {
         if (err) {
             console.error('Error checking image:', err);
             return res.status(500).json({ error: 'Database error' });
         }
+
+        const row = result.rows[0];
 
         if (!row) {
             console.log('No image found with ID:', imageId);
@@ -591,7 +575,7 @@ app.delete('/delete_image/:imageId', authenticateTokenWithAutoRefresh, (req, res
         }
 
         // Image exists, proceed with deletion
-        db.run('DELETE FROM images WHERE id = ?', [imageId], function(err) {
+        pool.query('DELETE FROM images WHERE id = $1', [imageId], function(err) {
             if (err) {
                 console.error('Delete error:', err);
                 return res.status(500).json({ error: 'Failed to delete image' });
@@ -603,78 +587,91 @@ app.delete('/delete_image/:imageId', authenticateTokenWithAutoRefresh, (req, res
     });
 });
 
+// Delete image
+app.delete('/images/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
+    const imageId = parseInt(req.params.id);
+    const userId = req.user.userId;
+    try {
+        const result = await pool.query(
+            'DELETE FROM images WHERE id = $1 AND user_id = $2 RETURNING *',
+            [imageId, userId]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Image not found or unauthorized' });
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete error:', error);
+        res.status(500).json({ error: 'Failed to delete image' });
+    }
+});
+
 // --- Comment Routes ---
 
 // Add Comment to an Image
-app.post('/add_comment', (req, res) => {
+app.post('/add_comment', authenticateTokenWithAutoRefresh, async (req, res) => {
     const { userId, imageId, comment } = req.body;
 
-    const insertQuery = `
-        INSERT INTO comments (user_id, image_id, comment)
-        VALUES (?, ?, ?);
-    `;
-
-    db.run(insertQuery, [userId, imageId, comment], function (err) {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ error: 'Failed to add comment' });
-        }
-
-        const fetchQuery = `
-            SELECT 
-                comments.id AS comment_id,
-                comments.comment,
-                comments.created_at,
-                users.username
-            FROM 
-                comments
-            INNER JOIN 
-                users
-            ON 
-                comments.user_id = users.id
-            WHERE 
-                comments.id = ?;
-        `;
-
-        db.get(fetchQuery, [this.lastID], (err, row) => {
-            if (err) {
-                console.error(err);
-                return res.status(500).json({ error: 'Failed to fetch added comment' });
-            }
-
-            res.json(row); // Send the new comment (including username) to the client
-        });
-    });
+    try {
+        await pool.query(
+            'INSERT INTO comments (user_id, image_id, comment) VALUES ($1, $2, $3)',
+            [userId, imageId, comment]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to add comment' });
+    }
 });
 
+// Add comment
+app.post('/add_comment', authenticateTokenWithAutoRefresh, async (req, res) => {
+    const { imageId, comment } = req.body;
+    const userId = req.user.userId;
+    try {
+        await pool.query(
+            'INSERT INTO comments (user_id, image_id, comment) VALUES ($1, $2, $3)',
+            [userId, imageId, comment]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Comment add error:', error);
+        res.status(500).json({ error: 'Failed to add comment' });
+    }
+});
 
 // Fetch comments for a specific image
-app.get('/fetch_comments', authenticateTokenWithAutoRefresh, (req, res) => {
+app.get('/fetch_comments', authenticateTokenWithAutoRefresh, async (req, res) => {
     const imageId = req.query.id;
 
-    const query = `
-        SELECT 
-            comments.id,
-            comments.image_id,
-            comments.user_id,
-            comments.comment,
-            comments.created_at,
-            users.profile_picture,
-            users.username
-        FROM comments
-        JOIN users ON comments.user_id = users.id
-        WHERE comments.image_id = ?`;
-
-    db.all(query, [imageId], (err, rows) => {
-        if (err) {
-            console.error('Error fetching comments:', err);
-            return res.status(500).json({ error: 'Failed to fetch comments' });
-        }
-
-        res.json({ comments: rows });
-    });
+    try {
+        const result = await pool.query(
+            'SELECT c.*, u.username, u.profile_picture FROM comments c JOIN users u ON c.user_id = u.id WHERE c.image_id = $1',
+            [imageId]
+        );
+        res.json({ comments: result.rows });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch comments' });
+    }
 });
 
+// Fetch comments
+app.get('/fetch_comments', async (req, res) => {
+    const { id } = req.query;
+    try {
+        const result = await pool.query(`
+            SELECT c.*, u.username, u.profile_picture 
+            FROM comments c 
+            JOIN users u ON c.user_id = u.id 
+            WHERE c.image_id = $1 
+            ORDER BY c.created_at DESC`,
+            [id]
+        );
+        res.json({ comments: result.rows });
+    } catch (error) {
+        console.error('Comment fetch error:', error);
+        res.status(500).json({ error: 'Failed to fetch comments' });
+    }
+});
 
 // --- Favorites Routes (Optional) ---
 
@@ -683,8 +680,8 @@ app.post('/add_favorite', authenticateTokenWithAutoRefresh, (req, res) => {
     const { imageId } = req.body;
     const userId = req.user.userId;
 
-    db.run(
-        `INSERT INTO favorites (user_id, image_id) VALUES (?, ?)`,
+    pool.query(
+        `INSERT INTO favorites (user_id, image_id) VALUES ($1, $2)`,
         [userId, imageId],
         function (err) {
             if (err) {
@@ -709,12 +706,12 @@ app.post('/upload_profile_picture', authenticateTokenWithAutoRefresh, upload.sin
     try {
         // Get old picture info
         const oldPicture = await new Promise((resolve, reject) => {
-            db.get(
-                'SELECT filepath FROM profile_pictures WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+            pool.query(
+                'SELECT filepath FROM profile_pictures WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
                 [userId],
-                (err, row) => {
+                (err, result) => {
                     if (err) reject(err);
-                    else resolve(row ? row.filepath : null);
+                    else resolve(result.rows[0] ? result.rows[0].filepath : null);
                 }
             );
         });
@@ -729,8 +726,8 @@ app.post('/upload_profile_picture', authenticateTokenWithAutoRefresh, upload.sin
         }
 
         // Insert into profile_pictures table
-        db.run(
-            'INSERT INTO profile_pictures (user_id, filename, filepath) VALUES (?, ?, ?)',
+        pool.query(
+            'INSERT INTO profile_pictures (user_id, filename, filepath) VALUES ($1, $2, $3)',
             [userId, filename, filepath],
             function(err) {
                 if (err) {
@@ -739,8 +736,8 @@ app.post('/upload_profile_picture', authenticateTokenWithAutoRefresh, upload.sin
                 }
 
                 // Update users table
-                db.run(
-                    'UPDATE users SET profile_picture = ? WHERE id = ?',
+                pool.query(
+                    'UPDATE users SET profile_picture = $1 WHERE id = $2',
                     [filepath, userId],
                     function(err) {
                         if (err) {
@@ -773,17 +770,19 @@ app.get('/profile_picture', authenticateTokenWithAutoRefresh, (req, res) => {
             pp.filepath as pp_picture
         FROM users u
         LEFT JOIN profile_pictures pp ON pp.user_id = u.id
-        WHERE u.id = ?
+        WHERE u.id = $1
         ORDER BY pp.created_at DESC
         LIMIT 1
     `;
     
-    db.get(query, [userId], (err, row) => {
+    pool.query(query, [userId], (err, result) => {
         if (err) {
             console.error('Database error:', err);
             return res.status(500).json({ error: 'Internal server error' });
         }
         
+        const row = result.rows[0];
+
         console.log('Query result:', row);
         
         // Check both possible picture sources
@@ -814,14 +813,17 @@ app.get('/user_profile/:id', authenticateTokenWithAutoRefresh, (req, res) => {
     const query = `
         SELECT username, bio, profile_picture
         FROM users
-        WHERE id = ?
+        WHERE id = $1
     `;
 
-    db.get(query, [userId], (err, row) => {
+    pool.query(query, [userId], (err, result) => {
         if (err) {
             console.error('Error fetching user profile:', err);
             return res.status(500).json({ error: 'Failed to fetch user profile' });
         }
+
+        const row = result.rows[0];
+
         if (!row) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -837,17 +839,33 @@ app.post('/update_profile', authenticateTokenWithAutoRefresh, (req, res) => {
 
     const query = `
         UPDATE users
-        SET username = ?, bio = ?
-        WHERE id = ?
+        SET username = $1, bio = $2
+        WHERE id = $3
     `;
 
-    db.run(query, [username, bio, userId], function (err) {
+    pool.query(query, [username, bio, userId], function (err) {
         if (err) {
             console.error('Error updating profile:', err);
             return res.status(500).json({ error: 'Failed to update profile' });
         }
         res.json({ message: 'Profile updated successfully' });
     });
+});
+
+// Update user profile
+app.put('/update_profile', authenticateTokenWithAutoRefresh, async (req, res) => {
+    const userId = req.user.userId;
+    const { username, email } = req.body;
+    try {
+        await pool.query(
+            'UPDATE users SET username = $1, email = $2 WHERE id = $3',
+            [username, email, userId]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Profile update error:', error);
+        res.status(500).json({ error: 'Failed to update profile' });
+    }
 });
 
 app.get('/user_images/:userId', authenticateTokenWithAutoRefresh, (req, res) => {
@@ -858,22 +876,51 @@ app.get('/user_images/:userId', authenticateTokenWithAutoRefresh, (req, res) => 
         return res.status(400).json({ error: 'User ID is required' });
     }
 
-    db.all(
+    pool.query(
         `SELECT images.*, users.username, users.profile_picture 
          FROM images 
          JOIN users ON images.user_id = users.id 
-         WHERE user_id = ? 
+         WHERE user_id = $1 
          ORDER BY created_at DESC`,
         [userId],
-        (err, rows) => {
+        (err, result) => {
             if (err) {
                 console.error('Error fetching user images:', err);
                 return res.status(500).json({ error: 'Failed to fetch user images' });
             }
-            console.log('Found images for user:', rows?.length); // Debug log
-            res.json({ images: rows });
+            console.log('Found images for user:', result.rows?.length); // Debug log
+            res.json({ images: result.rows });
         }
     );
+});
+
+// Add new endpoints for bulk fetching likes and comments
+app.get('/images/likes', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT image_id, COUNT(*) as count 
+            FROM likes 
+            GROUP BY image_id
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+app.get('/images/comments', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT image_id, json_agg(comments.*) as comments 
+            FROM comments 
+            GROUP BY image_id
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 // Start server

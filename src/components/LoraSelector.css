@@ -1,0 +1,86 @@
+.lora-selector {
+    background: #1a1a1a;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+.lora-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.lora-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: #2a2a2a;
+    border-radius: 4px;
+}
+
+.lora-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.lora-weight {
+    width: 100%;
+}
+
+.weight-value {
+    text-align: center;
+    font-size: 0.9em;
+    color: #888;
+}
+
+.lora-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.lora-popup {
+    background: #1a1a1a;
+    padding: 2rem;
+    border-radius: 8px;
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.presets-section {
+    margin-bottom: 20px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.preset-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.preset-button {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.preset-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}

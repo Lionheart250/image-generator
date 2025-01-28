@@ -52,6 +52,7 @@ const Header = () => {
     const handleLogout = () => {
         logout();
         setIsDropdownOpen(false);
+        setIsMoreMenuOpen(false);
         navigate('/');
     };
 
@@ -98,7 +99,7 @@ const Header = () => {
                                 <NavLink to="/following">Following</NavLink>
                             </>
                         )}
-                        {headerPosition === 'side' && user && (
+                        {headerPosition === 'side' && (
                             <>
                                 <NavLink to="/gallery" className="side-nav-link">
                                     <ExploreIcon className="nav-icon" />
@@ -112,10 +113,17 @@ const Header = () => {
                                     <FollowingIcon className="nav-icon" />
                                     <span>Following</span>
                                 </NavLink>
-                                <NavLink to={`/profile/${user.id}`} className="side-nav-link">
-                                    <img src={headerProfilePic} alt="Profile" className="nav-icon header-profile-pic" />
-                                    <span>Profile</span>
-                                </NavLink>
+                                {user ? (
+                                    <NavLink to={`/profile/${user.id}`} className="side-nav-link">
+                                        <img src={headerProfilePic} alt="Profile" className="nav-icon header-profile-pic" />
+                                        <span>Profile</span>
+                                    </NavLink>
+                                ) : (
+                                    <NavLink to="/login" className="side-nav-link">
+                                        <img src="/default-avatar.png" alt="Sign In" className="nav-icon header-profile-pic" />
+                                        <span>Sign In</span>
+                                    </NavLink>
+                                )}
                                 <NavLink to="/upgrade" className="side-nav-link">
                                     <UpgradeIcon className="nav-icon" />
                                     <span>Upgrade</span>

@@ -3,8 +3,10 @@ import { useAuth } from '../AuthContext'; // Adjust path to your AuthContext
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import './ImageGenerator.css';
+import LoraSelector from '../components/LoraSelector';
 
-function ImageGenerator() {
+
+const ImageGenerator = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [prompt, setPrompt] = useState('');
@@ -19,6 +21,8 @@ function ImageGenerator() {
   const [spiral2] = useState("Generating your image");
   const spiralRef = useRef(null);
   const spiral2Ref = useRef(null);
+  const [selectedLoras, setSelectedLoras] = useState({});
+  const [isLoraOpen, setIsLoraOpen] = useState(false);
 
   const ANIMATION_DURATION = 2000; // 2 seconds for full animation
   const ANIMATION_OFFSET = 500; // 0.5 second offset
@@ -85,6 +89,12 @@ function ImageGenerator() {
     };
   }, [loading, spiral2]);
 
+  const buildLoraString = () => {
+    return Object.entries(selectedLoras)
+        .map(([id, weight]) => `<lora:${id}:${weight}>`)
+        .join(' ');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -100,9 +110,8 @@ function ImageGenerator() {
 
     const { width, height, hiresWidth, hiresHeight } = dimensions[aspectRatio];
 
-    const defaultPrompt = " <lora:cutesexyronutts_style_xl:0.2> <lora:Expressive_H:0.2> <lora:3g0th1cPXL:0.3> <lora:incase-ilff-v3-4:0.3> <lora:Furry_Anthro_Lola_Bunny_Lora:1> ";
-
-    const finalPrompt = `${prompt} ${defaultPrompt}`;
+    const loraString = buildLoraString();
+    const finalPrompt = `${prompt} ${loraString}`;
 
     const defaultNegativePrompt = " muscular, 3d, monochrome, watermark, text, thicc, missing fingers, extra arms, extra hands, extra limbs, easynegative, EasyNegativeV2, negative_hand, japanese, japanese text, worst quality, low quality, lowres, jpeg artifacts, bad anatomy, bad hands, watermark, ((extra fingers, door, big head)), long neck, character merging";
     
@@ -112,7 +121,7 @@ function ImageGenerator() {
       prompt: finalPrompt,
       negativePrompt: finalNegativePrompt,
       cfgScale,
-      steps: 24,
+      steps: 20,
       width,
       height,
       enable_hr: enableUpscale, // Use the state for upscaling
@@ -148,130 +157,146 @@ function ImageGenerator() {
   };
 
   return (
-    <div className="image-generator-container">
-      <div className="image-generator-form-container">
-        <h2 className="image-generator-heading"></h2>
-        <form onSubmit={handleSubmit} className="image-generator-form">
-          <div className="image-generator-form-group">
-            <label className="image-generator-label" htmlFor="prompt">Prompt:</label>
-            <input
-              type="text"
-              id="prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              required 
-              className="image-generator-input"
-            />
-          </div>
-          <div className="image-generator-form-group">
-            <label className="image-generator-label" htmlFor="negativePrompt">Negative Prompt:</label>
-            <input
-              type="text"
-              id="negativePrompt"
-              value={negativePrompt}
-              onChange={(e) => setNegativePrompt(e.target.value)}
-              placeholder="what to exclude"
-              className="image-generator-input"
-            />
-          </div>
-          <div className="image-generator-creative-section">
-            <label className="image-generator-label">Creative Control</label>
-            <div className="image-generator-creative-buttons">
-              <button
-                type="button"
-                className={`image-generator-creative-btn ${cfgScale === 1 ? 'selected' : ''}`}
-                onClick={() => setCfgScale(1)}
-              >
-                Very Creative
-              </button>
-              <button
-                type="button"
-                className={`image-generator-creative-btn ${cfgScale === 7 ? 'selected' : ''}`}
-                onClick={() => setCfgScale(7)}
-              >
-                Creative
-              </button>
-              <button
-                type="button"
-                className={`image-generator-creative-btn ${cfgScale === 15 ? 'selected' : ''}`}
-                onClick={() => setCfgScale(15)}
-              >
-                Subtle
-              </button>
-              <button
-                type="button"
-                className={`image-generator-creative-btn ${cfgScale === 30 ? 'selected' : ''}`}
-                onClick={() => setCfgScale(30)}
-              >
-                Strict
-              </button>
+    <div className="image-generator">
+      <div className="image-generator-container">
+        <div className="image-generator-form-container">
+          <h2 className="image-generator-heading"></h2>
+          <form onSubmit={handleSubmit} className="image-generator-form">
+            <div className="image-generator-form-group">
+              <label className="image-generator-label" htmlFor="prompt">Prompt:</label>
+              <input
+                type="text"
+                id="prompt"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                required 
+                className="image-generator-input"
+              />
             </div>
-          </div>
-          <div className="image-generator-aspect-section">
-            <label className="image-generator-label">Aspect Ratio</label>
-            <div className="image-generator-aspect-buttons">
-              <button
-                type="button"
-                className={`image-generator-aspect-btn ${aspectRatio === 'Portrait' ? 'selected' : ''}`}
-                onClick={() => setAspectRatio('Portrait')}
-              >
-                Portrait
-              </button>
-              <button
-                type="button"
-                className={`image-generator-aspect-btn ${aspectRatio === 'Landscape' ? 'selected' : ''}`}
-                onClick={() => setAspectRatio('Landscape')}
-              >
-                Landscape
-              </button>
-              <button
-                type="button"
-                className={`image-generator-aspect-btn ${aspectRatio === 'Square' ? 'selected' : ''}`}
-                onClick={() => setAspectRatio('Square')}
-              >
-                Square
-              </button>
+            <div className="image-generator-form-group">
+              <label className="image-generator-label" htmlFor="negativePrompt">Negative Prompt:</label>
+              <input
+                type="text"
+                id="negativePrompt"
+                value={negativePrompt}
+                onChange={(e) => setNegativePrompt(e.target.value)}
+                placeholder="what to exclude"
+                className="image-generator-input"
+              />
             </div>
-          </div>
-
-          {/* Upscale Toggle Section */}
-          <div className="image-generator-upscale-section">
-            <label className="image-generator-label">Upscale</label>
-            <div className="image-generator-upscale-buttons"></div>
-            <button
+            <button 
               type="button"
-              className={`image-generator-upscale-btn ${enableUpscale ? 'selected' : ''}`}
-              onClick={() => setEnableUpscale((prev) => !prev)}
+              className={`lora-settings-button ${Object.keys(selectedLoras).length > 0 ? 'active' : ''}`}
+              onClick={() => setIsLoraOpen(true)}
             >
-              {enableUpscale ? 'On' : 'Off'}
+              Lora Settings
             </button>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={`image-generator-submit-btn ${loading ? 'disabled' : ''}`}
-          >
-            {loading ? 'Generating...' : 'Generate Image'}
-          </button>
-        </form>
-      </div>
-      <div className="image-generator-preview-wrapper">
-        <div className={`image-generator-preview ${loading ? 'loading' : ''}`}>
-          <div className={`image-generator-preview-container ${loading ? 'loading' : ''}`}>
-            {loading ? (
-              <div className="image-generator-loading">
-                <div className="loading-spinner">
-                  <div className="loading-spinner-inner"></div>
-                </div>
-                <div className="loading-text" ref={spiralRef}></div>
-                <div className="loading-text" ref={spiral2Ref}></div>
+            
+            <LoraSelector 
+              selectedLoras={selectedLoras}
+              setSelectedLoras={setSelectedLoras}
+              isOpen={isLoraOpen}
+              onClose={() => setIsLoraOpen(false)}
+            />
+            <div className="image-generator-creative-section">
+              <label className="image-generator-label">Creative Control</label>
+              <div className="image-generator-creative-buttons">
+                <button
+                  type="button"
+                  className={`image-generator-creative-btn ${cfgScale === 1 ? 'selected' : ''}`}
+                  onClick={() => setCfgScale(1)}
+                >
+                  Very Creative
+                </button>
+                <button
+                  type="button"
+                  className={`image-generator-creative-btn ${cfgScale === 7 ? 'selected' : ''}`}
+                  onClick={() => setCfgScale(7)}
+                >
+                  Creative
+                </button>
+                <button
+                  type="button"
+                  className={`image-generator-creative-btn ${cfgScale === 15 ? 'selected' : ''}`}
+                  onClick={() => setCfgScale(15)}
+                >
+                  Subtle
+                </button>
+                <button
+                  type="button"
+                  className={`image-generator-creative-btn ${cfgScale === 30 ? 'selected' : ''}`}
+                  onClick={() => setCfgScale(30)}
+                >
+                  Strict
+                </button>
               </div>
-            ) : image ? (
-              <img src={image} alt="Generated" className="generated-image" />
-            ) : (
-              <div className="placeholder-text"></div>
-            )}
+            </div>
+            <div className="image-generator-aspect-section">
+              <label className="image-generator-label">Aspect Ratio</label>
+              <div className="image-generator-aspect-buttons">
+                <button
+                  type="button"
+                  className={`image-generator-aspect-btn ${aspectRatio === 'Portrait' ? 'selected' : ''}`}
+                  onClick={() => setAspectRatio('Portrait')}
+                >
+                  Portrait
+                </button>
+                <button
+                  type="button"
+                  className={`image-generator-aspect-btn ${aspectRatio === 'Landscape' ? 'selected' : ''}`}
+                  onClick={() => setAspectRatio('Landscape')}
+                >
+                  Landscape
+                </button>
+                <button
+                  type="button"
+                  className={`image-generator-aspect-btn ${aspectRatio === 'Square' ? 'selected' : ''}`}
+                  onClick={() => setAspectRatio('Square')}
+                >
+                  Square
+                </button>
+              </div>
+            </div>
+
+            {/* Upscale Toggle Section */}
+            <div className="image-generator-upscale-section">
+              <label className="image-generator-label">Upscale</label>
+              <div className="image-generator-upscale-buttons"></div>
+              <button
+                type="button"
+                className={`image-generator-upscale-btn ${enableUpscale ? 'selected' : ''}`}
+                onClick={() => setEnableUpscale((prev) => !prev)}
+              >
+                {enableUpscale ? 'On' : 'Off'}
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className={`image-generator-submit-btn ${loading ? 'disabled' : ''}`}
+            >
+              {loading ? 'Generating...' : 'Generate Image'}
+            </button>
+          </form>
+        </div>
+        <div className="image-generator-preview-wrapper">
+          <div className={`image-generator-preview ${loading ? 'loading' : ''}`}>
+            <div className={`image-generator-preview-container ${loading ? 'loading' : ''}`}>
+              {loading ? (
+                <div className="image-generator-loading">
+                  <div className="loading-spinner">
+                    <div className="loading-spinner-inner"></div>
+                  </div>
+                  <div className="loading-text" ref={spiralRef}></div>
+                  <div className="loading-text" ref={spiral2Ref}></div>
+                </div>
+              ) : image ? (
+                <img src={image} alt="Generated" className="generated-image" />
+              ) : (
+                <div className="placeholder-text"></div>
+              )}
+            </div>
           </div>
         </div>
       </div>
