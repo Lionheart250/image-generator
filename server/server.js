@@ -16,6 +16,7 @@ const port = 3000;
 
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/profile_pictures', express.static(path.join(__dirname, 'profile_pictures')));
 
 // Create upload directory if it doesn't exist
 const uploadDir = path.join(__dirname, 'profile_pictures');
@@ -32,11 +33,20 @@ console.log('Environment variables:', {
 });
 
 const pool = new Pool({
-    user: 'jack',
-    host: 'localhost',
-    database: 'anime_ai_db',
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
-    port: 5432
+    port: process.env.DB_PORT
+});
+
+// Add better error handling
+pool.on('error', (err) => {
+    console.error('Database connection error:', err);
+    if (err.code === 'ECONNREFUSED') {
+        console.error('Ensure PostgreSQL is running:');
+        console.error('brew services start postgresql@14');
+    }
 });
 
 pool.query('SELECT NOW()', (err, res) => {
@@ -57,7 +67,13 @@ pool.query('SELECT NOW()', (err, res) => {
 pool.query("SELECT setval('refresh_tokens_id_seq', (SELECT MAX(id) FROM refresh_tokens));");
 
 // Middleware
-app.use(cors({ origin: process.env.CORS_ORIGIN })); // Allow requests from frontend
+
+app.use(cors({
+    origin: 'http://localhost:3001',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(bodyParser.json());
 
 // Add request logging middleware
@@ -71,7 +87,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const REFRESH_SECRET = process.env.REFRESH_SECRET;
 
 // Middleware to verify and refresh tokens
-const authenticateTokenWithAutoRefresh = (req, res, next) => {
+const authenticateTokenWithAutoRefresh = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -80,12 +96,20 @@ const authenticateTokenWithAutoRefresh = (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        req.user = decoded;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('Auth middleware decoded token:', decoded);
+        
+        req.user = {
+            userId: decoded.userId,  // Match the token field name
+            username: decoded.username,
+            role: decoded.role
+        };
+        
+        console.log('Set req.user:', req.user);
         next();
     } catch (err) {
         console.error('Token verification error:', err);
-        return res.status(403).json({ error: 'Invalid token' });
+        res.status(403).json({ error: 'Invalid token' });
     }
 };
 
@@ -104,41 +128,64 @@ const optionalAuthenticateToken = (req, res, next) => {
 
 // Add after middleware setup
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'profile_pictures/');
+    destination: function (req, file, cb) {
+        cb(null, './profile_pictures')
     },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, `${uniqueSuffix}-${file.originalname}`);
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now();
+        cb(null, `profile_${req.user.userId}_${uniqueSuffix}${path.extname(file.originalname)}`);
     }
 });
 
 const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/)) {
-            return cb(new Error('Only image files are allowed!'), false);
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Not an image file'));
         }
-        cb(null, true);
     }
-});
+}).single('image'); // Changed from 'profile_picture' to 'image'
 
 // --- User Routes ---
 
 // Register User
 app.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
+    const client = await pool.connect();
 
     try {
+        await client.query('BEGIN');
+
+        // Reset sequence if needed
+        await client.query(`
+            SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 0))
+        `);
+
+        // Hash password and create user
         const hashedPassword = await bcrypt.hash(password, 10);
-        const result = await pool.query(
+        const result = await client.query(
             'INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id',
             [username, hashedPassword, email]
         );
+
+        await client.query('COMMIT');
         res.json({ id: result.rows[0].id });
+
     } catch (error) {
-        res.status(500).json({ error: 'Registration failed' });
+        await client.query('ROLLBACK');
+        console.error('Registration error:', error);
+        
+        if (error.constraint === 'users_username_key') {
+            res.status(400).json({ error: 'Username already exists' });
+        } else if (error.constraint === 'users_email_key') {
+            res.status(400).json({ error: 'Email already exists' });
+        } else {
+            res.status(500).json({ error: 'Registration failed' });
+        }
+    } finally {
+        client.release();
     }
 });
 
@@ -335,127 +382,42 @@ app.get('/images/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
     }
 });
 
+const FORGE_URL = 'http://127.0.0.1:7860';
+
 // Generate image
 app.post('/generate_image', authenticateTokenWithAutoRefresh, async (req, res) => {
+    const { prompt, negativePrompt, width, height, distilled_cfg_scale, steps, sampler_name } = req.body;
     const userId = req.user.userId;
-    if (!userId) {
-        return res.status(401).json({ error: 'User ID not found' });
-    }
-
-    const { 
-        prompt, 
-        negativePrompt, 
-        cfgScale, 
-        steps, 
-        width, 
-        height, 
-        enable_hr, 
-        denoising_strength, 
-        upscale_factor, 
-        hires_width, 
-        hires_height 
-    } = req.body;
-
-    // Validate required fields
-    if (!prompt) {
-        return res.status(400).json({ error: 'Prompt is required' });
-    }
-    if (cfgScale < 1 || cfgScale > 30) {
-        return res.status(400).json({ error: 'cfgScale must be between 1 and 30' });
-    }
-    if (steps < 1 || steps > 100) {
-        return res.status(400).json({ error: 'Steps must be between 1 and 100' });
-    }
-    if (width < 256 || width > 2048 || height < 256 || height > 2048) {
-        return res.status(400).json({ error: 'Width and Height must be between 256 and 2048' });
-    }
-
-    if (enable_hr) {
-        if (typeof denoising_strength !== 'number' || denoising_strength < 0 || denoising_strength > 1) {
-            return res.status(400).json({ error: 'Denoising strength must be a number between 0 and 1' });
-        }
-        if (upscale_factor < 1 || upscale_factor > 4) {
-            return res.status(400).json({ error: 'Upscale factor must be between 1 and 4' });
-        }
-        if (hires_width < 256 || hires_width > 2048 || hires_height < 256 || hires_height > 2048) {
-            return res.status(400).json({ error: 'HiRes dimensions must be between 256 and 2048' });
-        }
-    }
-
-    const payload = {
-        prompt,
-        negative_prompt: negativePrompt,
-        cfg_scale: cfgScale,
-        steps,
-        width,
-        height,
-        enable_hr,
-        denoising_strength: enable_hr ? denoising_strength : undefined,
-        upscale_factor: enable_hr ? upscale_factor : undefined,
-        hires_width: enable_hr ? hires_width : undefined,
-        hires_height: enable_hr ? hires_height : undefined
-    };
 
     try {
-        const response = await axios.post('http://127.0.0.1:7860/sdapi/v1/txt2img', payload, {
-            headers: {
-                'Content-Type': 'application/json',
-            },
+        // Generate image with ForgeUI
+        const response = await axios.post(`${FORGE_URL}/sdapi/v1/txt2img`, {
+            prompt: prompt,
+            negative_prompt: negativePrompt,
+            width: width,
+            height: height,
+            cfg_scale: 1,
+            distilled_cfg_scale: distilled_cfg_scale || 3.5,
+            steps: steps || 20,
+            sampler_name: "Euler",
+            scheduler: "Simple",
+            batch_size: 1,
+            seed: -1
         });
 
-        if (response.data && response.data.images && response.data.images[0]) {
+        if (response.data?.images?.[0]) {
             const imageUrl = `data:image/png;base64,${response.data.images[0]}`;
+            const result = await pool.query(
+                `INSERT INTO images (user_id, image_url, prompt, negative_prompt, steps, width, height) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+                [userId, imageUrl, prompt, negativePrompt, steps, width, height]
+            );
 
-            console.log('Inserting with values:', {
-                userId,
-                promptLength: prompt?.length,
-                negativePromptLength: negativePrompt?.length,
-                cfgScale,
-                steps,
-                width,
-                height,
-                enable_hr,
-                denoising_strength,
-                upscale_factor,
-                hires_width,
-                hires_height
-            });
-
-            const query = `
-                INSERT INTO images (
-                    user_id, image_url, prompt, negative_prompt, 
-                    cfg_scale, steps, width, height, 
-                    enable_hires_fix, denoising_strength, 
-                    upscale_factor, hires_width, hires_height,
-                    categories
-                ) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-                RETURNING id`;
-
-            await pool.query(query, [
-                parseInt(userId) || null,  // Ensure integer or null
-                imageUrl,
-                prompt || '',
-                negativePrompt || '',
-                parseInt(cfgScale) || null,
-                parseInt(steps) || null,
-                parseInt(width) || null,
-                parseInt(height) || null,
-                enable_hr ? 1 : 0,
-                parseFloat(denoising_strength) || null,
-                parseInt(upscale_factor) || null,
-                parseInt(hires_width) || null,
-                parseInt(hires_height) || null,
-                []
-            ]);
-
-            res.json({ image: imageUrl });
-        } else {
-            res.status(500).json({ error: 'No image generated' });
+            res.json({ image: response.data.images[0], imageId: result.rows[0].id });
         }
     } catch (error) {
-        console.error('Error generating image:', error);
-        res.status(500).json({ error: `Failed to generate image: ${error.message}` });
+        console.error('ForgeUI Error:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Failed to generate image' });
     }
 });
 
@@ -554,51 +516,114 @@ app.delete('/remove_like', (req, res) => {
     });
 });
 
+// Single endpoint for handling likes
+app.route('/likes/:imageId')
+    .get(authenticateTokenWithAutoRefresh, async (req, res) => {
+        const imageId = req.params.imageId;
+        const userId = req.user.userId;
 
-// Delete Image
-app.delete('/delete_image/:imageId', authenticateTokenWithAutoRefresh, (req, res) => {
-    const imageId = req.params.imageId;
-    console.log('Delete request for image:', imageId);
+        try {
+            const result = await pool.query(`
+                SELECT 
+                    COUNT(*) as total_likes,
+                    EXISTS(
+                        SELECT 1 FROM likes 
+                        WHERE image_id = $1 AND user_id = $2
+                    ) as user_liked
+                FROM likes 
+                WHERE image_id = $1
+            `, [imageId, userId]);
 
-    // First verify image exists
-    pool.query('SELECT * FROM images WHERE id = $1', [imageId], (err, result) => {
-        if (err) {
-            console.error('Error checking image:', err);
-            return res.status(500).json({ error: 'Database error' });
+            res.json({
+                count: parseInt(result.rows[0].total_likes),
+                userHasLiked: result.rows[0].user_liked
+            });
+        } catch (error) {
+            console.error('Error handling likes:', error);
+            res.status(500).json({ error: 'Failed to process likes request' });
         }
+    })
+    .post(authenticateTokenWithAutoRefresh, async (req, res) => {
+        const imageId = req.params.imageId;
+        const userId = req.user.userId;
 
-        const row = result.rows[0];
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            await client.query(`
+                INSERT INTO likes (user_id, image_id)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id, image_id) DO NOTHING
+            `, [userId, imageId]);
 
-        if (!row) {
-            console.log('No image found with ID:', imageId);
-            return res.status(404).json({ error: 'Image not found' });
+            const likeCount = await client.query(`
+                SELECT COUNT(*) as count
+                FROM likes
+                WHERE image_id = $1
+            `, [imageId]);
+
+            await client.query('COMMIT');
+            
+            res.json({
+                success: true,
+                count: parseInt(likeCount.rows[0].count)
+            });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Like error:', error);
+            res.status(500).json({ error: 'Failed to like image' });
+        } finally {
+            client.release();
         }
+    })
+    .delete(authenticateTokenWithAutoRefresh, async (req, res) => {
+        const imageId = req.params.imageId;
+        const userId = req.user.userId;
 
-        // Image exists, proceed with deletion
-        pool.query('DELETE FROM images WHERE id = $1', [imageId], function(err) {
-            if (err) {
-                console.error('Delete error:', err);
-                return res.status(500).json({ error: 'Failed to delete image' });
-            }
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            await client.query(`
+                DELETE FROM likes
+                WHERE user_id = $1 AND image_id = $2
+            `, [userId, imageId]);
 
-            console.log('Image deleted successfully:', imageId);
-            res.status(200).json({ message: 'Image deleted successfully' });
-        });
+            const likeCount = await client.query(`
+                SELECT COUNT(*) as count
+                FROM likes
+                WHERE image_id = $1
+            `, [imageId]);
+
+            await client.query('COMMIT');
+            
+            res.json({
+                success: true,
+                count: parseInt(likeCount.rows[0].count)
+            });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Unlike error:', error);
+            res.status(500).json({ error: 'Failed to unlike image' });
+        } finally {
+            client.release();
+        }
     });
-});
+
 
 // Delete image
 app.delete('/images/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
-    const imageId = parseInt(req.params.id);
-    const userId = req.user.userId;
     try {
         const result = await pool.query(
             'DELETE FROM images WHERE id = $1 AND user_id = $2 RETURNING *',
-            [imageId, userId]
+            [req.params.id, req.user.userId]
         );
-        if (result.rows.length === 0) {
+
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Image not found or unauthorized' });
         }
+
         res.json({ success: true });
     } catch (error) {
         console.error('Delete error:', error);
@@ -642,36 +667,125 @@ app.post('/add_comment', authenticateTokenWithAutoRefresh, async (req, res) => {
 // Fetch comments for a specific image
 app.get('/fetch_comments', authenticateTokenWithAutoRefresh, async (req, res) => {
     const imageId = req.query.id;
+    const userId = req.user.userId;
+    console.log('Fetching comments for image:', imageId);
 
-    try {
-        const result = await pool.query(
-            'SELECT c.*, u.username, u.profile_picture FROM comments c JOIN users u ON c.user_id = u.id WHERE c.image_id = $1',
-            [imageId]
-        );
-        res.json({ comments: result.rows });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch comments' });
-    }
-});
-
-// Fetch comments
-app.get('/fetch_comments', async (req, res) => {
-    const { id } = req.query;
     try {
         const result = await pool.query(`
-            SELECT c.*, u.username, u.profile_picture 
+            SELECT 
+                c.*,
+                u.username,
+                u.profile_picture,
+                COUNT(DISTINCT l.id) as like_count,
+                EXISTS (
+                    SELECT 1 
+                    FROM likes l2 
+                    WHERE l2.comment_id = c.id 
+                    AND l2.user_id = $2
+                ) as user_has_liked
             FROM comments c 
             JOIN users u ON c.user_id = u.id 
+            LEFT JOIN likes l ON l.comment_id = c.id
             WHERE c.image_id = $1 
+            GROUP BY c.id, u.username, u.profile_picture
             ORDER BY c.created_at DESC`,
-            [id]
+            [imageId, userId]
         );
-        res.json({ comments: result.rows });
+        
+        console.log(`Found ${result.rows.length} comments with likes`);
+        res.json({ 
+            comments: result.rows.map(comment => ({
+                ...comment,
+                like_count: parseInt(comment.like_count),
+                user_has_liked: comment.user_has_liked
+            }))
+        });
     } catch (error) {
-        console.error('Comment fetch error:', error);
+        console.error('Error fetching comments:', error);
         res.status(500).json({ error: 'Failed to fetch comments' });
     }
 });
+
+app.route('/comment_likes/:commentId')
+    .get(authenticateTokenWithAutoRefresh, async (req, res) => {
+        const { commentId } = req.params;
+        const userId = req.user.userId;
+        
+        try {
+            const result = await pool.query(`
+                SELECT COUNT(*) as count,
+                EXISTS(SELECT 1 FROM likes WHERE comment_id = $1 AND user_id = $2) as user_liked
+                FROM likes WHERE comment_id = $1`, 
+                [commentId, userId]
+            );
+            res.json(result.rows[0]);
+        } catch (error) {
+            console.error('Error fetching comment likes:', error);
+            res.status(500).json({ error: 'Failed to fetch comment likes' });
+        }
+    })
+    .post(authenticateTokenWithAutoRefresh, async (req, res) => {
+        const { commentId } = req.params;
+        const userId = req.user.userId;
+        
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            await client.query(
+                'INSERT INTO likes (user_id, comment_id, image_id) VALUES ($1, $2, NULL)',
+                [userId, commentId]
+            );
+            
+            const result = await client.query(
+                'SELECT COUNT(*) as count FROM likes WHERE comment_id = $1',
+                [commentId]
+            );
+            
+            await client.query('COMMIT');
+            res.json({ 
+                success: true, 
+                count: parseInt(result.rows[0].count) 
+            });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error liking comment:', error);
+            res.status(500).json({ error: 'Failed to like comment' });
+        } finally {
+            client.release();
+        }
+    })
+    .delete(authenticateTokenWithAutoRefresh, async (req, res) => {
+        const { commentId } = req.params;
+        const userId = req.user.userId;
+        
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            await client.query(
+                'DELETE FROM likes WHERE user_id = $1 AND comment_id = $2',
+                [userId, commentId]
+            );
+            
+            const result = await client.query(
+                'SELECT COUNT(*) as count FROM likes WHERE comment_id = $1',
+                [commentId]
+            );
+            
+            await client.query('COMMIT');
+            res.json({ 
+                success: true, 
+                count: parseInt(result.rows[0].count) 
+            });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error unliking comment:', error);
+            res.status(500).json({ error: 'Failed to unlike comment' });
+        } finally {
+            client.release();
+        }
+    });
 
 // --- Favorites Routes (Optional) ---
 
@@ -694,107 +808,107 @@ app.post('/add_favorite', authenticateTokenWithAutoRefresh, (req, res) => {
 });
 
 // Upload Profile Picture
-app.post('/upload_profile_picture', authenticateTokenWithAutoRefresh, upload.single('profile_picture'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-    }
+app.post('/upload_profile_picture', authenticateTokenWithAutoRefresh, async (req, res) => {
+    upload(req, res, async function(err) {
+        if (err instanceof multer.MulterError) {
+            return res.status(400).json({ error: err.message });
+        } else if (err) {
+            return res.status(500).json({ error: 'Error uploading file' });
+        }
 
-    const userId = req.user.id;
-    const filepath = req.file.path;
-    const filename = req.file.filename;
+        const userId = req.user.userId;
+        const filepath = req.file.path;
+        const filename = req.file.filename;
 
-    try {
-        // Get old picture info
-        const oldPicture = await new Promise((resolve, reject) => {
-            pool.query(
+        try {
+            await pool.query('BEGIN');
+
+            // Delete old picture if exists
+            const oldPicture = await pool.query(
                 'SELECT filepath FROM profile_pictures WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
-                [userId],
-                (err, result) => {
-                    if (err) reject(err);
-                    else resolve(result.rows[0] ? result.rows[0].filepath : null);
-                }
+                [userId]
             );
-        });
 
-        // Delete old file if exists
-        if (oldPicture) {
-            try {
-                await fs.promises.unlink(oldPicture);
-            } catch (err) {
-                console.log('No previous profile picture to delete');
-            }
-        }
-
-        // Insert into profile_pictures table
-        pool.query(
-            'INSERT INTO profile_pictures (user_id, filename, filepath) VALUES ($1, $2, $3)',
-            [userId, filename, filepath],
-            function(err) {
-                if (err) {
-                    console.error('Error saving to profile_pictures:', err);
-                    return res.status(500).json({ error: 'Failed to save profile picture' });
+            if (oldPicture.rows[0]?.filepath) {
+                try {
+                    await fs.promises.unlink(oldPicture.rows[0].filepath);
+                } catch (err) {
+                    console.log('No previous profile picture to delete');
                 }
-
-                // Update users table
-                pool.query(
-                    'UPDATE users SET profile_picture = $1 WHERE id = $2',
-                    [filepath, userId],
-                    function(err) {
-                        if (err) {
-                            console.error('Error updating user profile:', err);
-                            return res.status(500).json({ error: 'Failed to update profile' });
-                        }
-                        res.json({ 
-                            message: 'Profile picture updated successfully',
-                            profilePicturePath: filepath 
-                        });
-                    }
-                );
             }
-        );
-    } catch (error) {
-        console.error('Error handling profile picture:', error);
-        res.status(500).json({ error: 'Failed to process profile picture' });
-    }
-});
 
-// Update profile picture retrieval endpoint
-app.get('/profile_picture', authenticateTokenWithAutoRefresh, (req, res) => {
-    const userId = req.user.id;
-    console.log('Fetching profile picture for user:', userId);
-    
-    // Query both tables
-    const query = `
-        SELECT 
-            u.profile_picture as user_picture,
-            pp.filepath as pp_picture
-        FROM users u
-        LEFT JOIN profile_pictures pp ON pp.user_id = u.id
-        WHERE u.id = $1
-        ORDER BY pp.created_at DESC
-        LIMIT 1
-    `;
-    
-    pool.query(query, [userId], (err, result) => {
-        if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({ error: 'Internal server error' });
+            // Insert new picture
+            await pool.query(
+                'INSERT INTO profile_pictures (user_id, filename, filepath) VALUES ($1, $2, $3)',
+                [userId, filename, filepath]
+            );
+
+            // Update user profile
+            await pool.query(
+                'UPDATE users SET profile_picture = $1 WHERE id = $2',
+                [filepath, userId]
+            );
+
+            await pool.query('COMMIT');
+
+            res.json({ 
+                success: true,
+                profilePicturePath: filepath 
+            });
+        } catch (error) {
+            await pool.query('ROLLBACK');
+            console.error('Error handling profile picture:', error);
+            res.status(500).json({ error: 'Failed to process profile picture' });
         }
-        
-        const row = result.rows[0];
-
-        console.log('Query result:', row);
-        
-        // Check both possible picture sources
-        const profilePicture = row?.pp_picture || row?.user_picture || 'default-avatar.png';
-        console.log('Selected profile picture:', profilePicture);
-        
-        res.json({ profile_picture: profilePicture });
     });
 });
 
-// Ensure static file serving is set up
-app.use('/profile_pictures', express.static(path.join(__dirname, 'profile_pictures')));
+// Update profile picture retrieval endpoint
+app.get('/profile_picture', authenticateTokenWithAutoRefresh, async (req, res) => {
+    const userId = req.user.userId; // Changed from req.user.id to req.user.userId
+    console.log('Fetching profile picture for user:', userId);
+    
+    try {
+        const query = `
+            SELECT 
+                u.profile_picture,
+                pp.filepath,
+                u.username
+            FROM users u
+            LEFT JOIN profile_pictures pp 
+                ON pp.user_id = u.id 
+                AND pp.id = (
+                    SELECT id 
+                    FROM profile_pictures 
+                    WHERE user_id = u.id 
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                )
+            WHERE u.id = $1
+        `;
+        
+        const result = await pool.query(query, [userId]);
+        console.log('Query result:', result.rows[0]);
+        
+        if (!result.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const profilePicture = result.rows[0].filepath || 
+                             result.rows[0].profile_picture || 
+                             'default-avatar.png';
+                             
+        console.log('Selected profile picture:', profilePicture);
+        
+        res.json({ 
+            profile_picture: profilePicture,
+            username: result.rows[0].username 
+        });
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 // Add error handling middleware
 app.use((err, req, res, next) => {
@@ -807,13 +921,25 @@ app.use((err, req, res, next) => {
 
 // Endpoint to get user profile
 app.get('/user_profile/:id', authenticateTokenWithAutoRefresh, (req, res) => {
-    const userId = req.params.id; // Use the id parameter from the URL
-    console.log(`Fetching profile for user ID: ${userId}`); // Debugging statement
+    const userId = req.params.id;
+    console.log(`Fetching profile for user ID: ${userId}`);
 
     const query = `
-        SELECT username, bio, profile_picture
-        FROM users
-        WHERE id = $1
+        SELECT 
+            u.username, 
+            u.bio, 
+            COALESCE(pp.filepath, u.profile_picture) as profile_picture
+        FROM users u
+        LEFT JOIN profile_pictures pp 
+            ON pp.user_id = u.id 
+            AND pp.id = (
+                SELECT id 
+                FROM profile_pictures 
+                WHERE user_id = u.id 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+        WHERE u.id = $1
     `;
 
     pool.query(query, [userId], (err, result) => {
@@ -823,15 +949,25 @@ app.get('/user_profile/:id', authenticateTokenWithAutoRefresh, (req, res) => {
         }
 
         const row = result.rows[0];
-
         if (!row) {
             return res.status(404).json({ error: 'User not found' });
         }
-        console.log('Query result:', row); // Debugging statement
-        res.json({ userId, ...row }); // Include userId in the response
+
+        const profilePicture = row.profile_picture || 'default-avatar.png';
+        console.log('User profile data:', {
+            userId,
+            username: row.username,
+            profile_picture: profilePicture
+        });
+
+        res.json({ 
+            userId,
+            username: row.username,
+            bio: row.bio,
+            profile_picture: profilePicture
+        });
     });
 });
-
 // Endpoint to update user profile
 app.post('/update_profile', authenticateTokenWithAutoRefresh, (req, res) => {
     const userId = req.user.id;
@@ -869,29 +1005,43 @@ app.put('/update_profile', authenticateTokenWithAutoRefresh, async (req, res) =>
 });
 
 app.get('/user_images/:userId', authenticateTokenWithAutoRefresh, (req, res) => {
-    console.log('Request params:', req.params); // Debug log
+    console.log('Request params:', req.params);
+    console.log('Authenticated user:', req.user);
     const userId = req.params.userId;
 
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
     }
 
-    pool.query(
-        `SELECT images.*, users.username, users.profile_picture 
-         FROM images 
-         JOIN users ON images.user_id = users.id 
-         WHERE user_id = $1 
-         ORDER BY created_at DESC`,
-        [userId],
-        (err, result) => {
-            if (err) {
-                console.error('Error fetching user images:', err);
-                return res.status(500).json({ error: 'Failed to fetch user images' });
-            }
-            console.log('Found images for user:', result.rows?.length); // Debug log
-            res.json({ images: result.rows });
+    // Add detailed logging
+    const query = `
+        SELECT images.*, users.username, users.profile_picture 
+        FROM images 
+        JOIN users ON images.user_id = users.id 
+        WHERE user_id = $1 
+        ORDER BY created_at DESC
+    `;
+    
+    console.log('Executing query with userId:', userId);
+
+    pool.query(query, [userId], (err, result) => {
+        if (err) {
+            console.error('Error fetching user images:', err);
+            return res.status(500).json({ error: 'Failed to fetch user images' });
         }
-    );
+        
+        // Log each image's details
+        result.rows.forEach(img => {
+            console.log('Image:', {
+                id: img.id,
+                user_id: img.user_id,
+                created_at: img.created_at
+            });
+        });
+        
+        console.log('Found images for user:', result.rows?.length);
+        res.json({ images: result.rows });
+    });
 });
 
 // Add new endpoints for bulk fetching likes and comments
@@ -924,7 +1074,6 @@ app.get('/images/comments', async (req, res) => {
 });
 
 // Start server
-app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server running on http://0.0.0.0:${port}`);
 });
-
