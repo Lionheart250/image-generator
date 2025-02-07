@@ -345,21 +345,46 @@ app.get('/images', optionalAuthenticateToken, async (req, res) => {
         const { sortType = 'newest', page = 1, limit = 20 } = req.query;
         const offset = (page - 1) * limit;
 
-        // Get ALL IDs sorted first
         const orderQuery = `
             SELECT i.id
             FROM images i
+            LEFT JOIN (
+                SELECT image_id,
+                    COUNT(*) as total_likes,
+                    COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 END) as recent_likes
+                FROM likes
+                GROUP BY image_id
+            ) l ON l.image_id = i.id
+            LEFT JOIN (
+                SELECT image_id,
+                    COUNT(*) as total_comments,
+                    COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 END) as recent_comments
+                FROM comments
+                GROUP BY image_id
+            ) c ON c.image_id = i.id
             ORDER BY 
                 CASE 
                     WHEN $1 = 'mostLiked' THEN (SELECT COUNT(*) FROM likes WHERE image_id = i.id)
                     WHEN $1 = 'mostCommented' THEN (SELECT COUNT(*) FROM comments WHERE image_id = i.id)
+                    WHEN $1 = 'trending' THEN 
+                        (COALESCE(recent_likes, 0) * 2 + COALESCE(recent_comments, 0) * 3) * 
+                        (1 + (1000000 / (EXTRACT(epoch FROM NOW() - i.created_at) + 1)))
                     ELSE extract(epoch from i.created_at)::bigint
                 END DESC`;
 
         const sortedIds = (await pool.query(orderQuery, [sortType])).rows.map(row => row.id);
         const totalImages = sortedIds.length;
 
-        // Get paginated chunk
+        if (offset >= totalImages) {
+            return res.json({
+                images: [],
+                hasMore: false,
+                total: totalImages
+            });
+        }
+
+        const pageIds = sortedIds.slice(offset, Math.min(offset + limit, totalImages));
+
         const result = await pool.query(`
             SELECT i.*, 
                    u.username,
@@ -371,8 +396,8 @@ app.get('/images', optionalAuthenticateToken, async (req, res) => {
             LEFT JOIN users u ON i.user_id = u.id
             WHERE i.id = ANY($2)
             ORDER BY array_position($2::int[], i.id)
-            LIMIT $3 OFFSET $4`,
-            [req.user?.userId || null, sortedIds.slice(offset, offset + limit), limit, offset]
+            LIMIT $3`,
+            [req.user?.userId || null, pageIds, limit]
         );
 
         res.json({
@@ -386,6 +411,64 @@ app.get('/images', optionalAuthenticateToken, async (req, res) => {
     }
 });
 
+app.post('/images', optionalAuthenticateToken, async (req, res) => {
+    try {
+        const { sortType = 'newest', page = 1, limit = 20 } = req.query;
+        const { globalLikeCounts, globalCommentCounts } = req.body;
+        const offset = (page - 1) * limit;
+
+        const allImagesQuery = `
+            SELECT i.id, i.created_at,
+                   (SELECT COUNT(*) FROM likes 
+                    WHERE image_id = i.id 
+                    AND created_at > NOW() - INTERVAL '24 hours') as recent_likes,
+                   (SELECT COUNT(*) FROM comments 
+                    WHERE image_id = i.id 
+                    AND created_at > NOW() - INTERVAL '24 hours') as recent_comments
+            FROM images i
+            ORDER BY created_at DESC`;
+            
+        const allImages = await pool.query(allImagesQuery);
+        
+        const sortedIds = allImages.rows
+            .sort((a, b) => {
+                if (sortType === 'mostLiked') {
+                    return (globalLikeCounts[b.id] || 0) - (globalLikeCounts[a.id] || 0);
+                }
+                if (sortType === 'mostCommented') {
+                    return (globalCommentCounts[b.id] || 0) - (globalCommentCounts[a.id] || 0);
+                }
+                if (sortType === 'trending') {
+                    const scoreA = (a.recent_likes * 2 + a.recent_comments * 3) * 
+                                 (1 + (1000000 / (Date.now() - new Date(a.created_at).getTime() + 1)));
+                    const scoreB = (b.recent_likes * 2 + b.recent_comments * 3) * 
+                                 (1 + (1000000 / (Date.now() - new Date(b.created_at).getTime() + 1)));
+                    return scoreB - scoreA;
+                }
+                return new Date(b.created_at) - new Date(a.created_at);
+            })
+            .map(img => img.id);
+
+        const pageIds = sortedIds.slice(offset, offset + limit);
+
+        const result = await pool.query(`
+            SELECT i.*, u.username, u.profile_picture
+            FROM images i
+            LEFT JOIN users u ON i.user_id = u.id
+            WHERE i.id = ANY($1)
+            ORDER BY array_position($1::int[], i.id)`,
+            [pageIds]
+        );
+
+        res.json({
+            images: result.rows,
+            hasMore: offset + limit < sortedIds.length
+        });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
 // Fetch single image
 app.get('/images/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
     const imageId = parseInt(req.params.id);

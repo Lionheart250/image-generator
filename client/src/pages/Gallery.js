@@ -8,6 +8,7 @@ import { ReactComponent as CommentIcon } from '../assets/icons/comment.svg';
 import { ReactComponent as ShareIcon } from '../assets/icons/share.svg';
 import { ReactComponent as BookmarkIcon } from '../assets/icons/bookmark.svg';
 
+
 const Gallery = () => {
     const [images, setImages] = useState([]);
     const [modalImage, setModalImage] = useState(null);
@@ -87,35 +88,6 @@ const Gallery = () => {
     
         fetchImagesAndCheckAuth();
     }, []);
-
-    // Modify fetch effect
-    useEffect(() => {
-        const fetchImages = async () => {
-            try {
-                const token = localStorage.getItem('token');
-                const response = await fetch(
-                    `http://localhost:3000/images?page=${page}&limit=20&sortType=${sortType}`,
-                    { headers: token ? { 'Authorization': `Bearer ${token}` } : {} }
-                );
-                
-                if (!response.ok) throw new Error('Failed to fetch images');
-                
-                const data = await response.json();
-                
-                if (page === 1) {
-                    setImages(data.images);
-                } else {
-                    setImages(prev => [...prev, ...data.images]);
-                }
-                setHasMore(data.hasMore);
-            } catch (error) {
-                console.error('Error:', error);
-            }
-        };
-
-        fetchImages();
-    }, [page, sortType]);
-
 
     // Modify useEffect that handles URL parameters
     useEffect(() => {
@@ -358,46 +330,52 @@ const Gallery = () => {
         navigate('', { replace: true });
     };
 
+    // Add effect to watch image loading
+    useEffect(() => {
+        if (fetchingRef.current && images.length > 0) {
+            fetchingRef.current = false;
+        }
+    }, [images.length]);
+
     const navigateImage = (direction) => {
-        const sortedImages = sortImages(images, sortType, timeRange);
-        const currentIndex = sortedImages.findIndex(img => img.id === activeImageId);
+        // Use already sorted images from state
+        const currentIndex = images.findIndex(img => img.id === activeImageId);
         
-        // Calculate current position in grid
-        const currentColumn = currentIndex % 4;
-        const currentRow = Math.floor(currentIndex / 4);
-        
-        let nextIndex;
-        if (direction === 1) { // Next
-            // If not at last column, move right
-            if (currentColumn < 3) {
-                nextIndex = currentIndex + 1;
-            } 
-            // If at last column, move to first column of next row
-            else {
-                nextIndex = (currentRow + 1) * 4;
-            }
-        } else { // Previous
-            // If not at first column, move left
-            if (currentColumn > 0) {
-                nextIndex = currentIndex - 1;
-            }
-            // If at first column, move to last column of previous row
-            else if (currentRow > 0) {
-                nextIndex = (currentRow * 4) - 1;
-            }
-            // If at first column of first row, stay put
-            else {
-                return;
-            }
+        // Always try to load next page if available
+        if (hasMore && !loading && !fetchingRef.current) {
+            fetchingRef.current = true;
+            setPage(prev => prev + 1);
         }
         
-        // Check if next index exists
-        if (nextIndex >= 0 && nextIndex < sortedImages.length) {
-            const nextImage = sortedImages[nextIndex];
-            setActiveImageId(nextImage.id);
-            setModalImage(nextImage.image_url);
-            fetchImageDetails(nextImage.id);
-            navigate(`?id=${nextImage.id}`, { replace: true });
+        const currentColumn = currentIndex % columns;
+        const currentRow = Math.floor(currentIndex / columns);
+        
+        let nextIndex;
+        if (direction === 1) {
+            if (currentColumn < columns - 1) {
+                nextIndex = currentIndex + 1;
+                if (images[nextIndex]?.id === activeImageId) {
+                    nextIndex++;
+                }
+            } else if ((currentRow + 1) * columns < images.length) {
+                nextIndex = (currentRow + 1) * columns;
+            }
+        } else {
+            if (currentColumn > 0) {
+                nextIndex = currentIndex - 1;
+            } else if (currentRow > 0) {
+                nextIndex = (currentRow * columns) - 1;
+            }
+        }
+    
+        if (nextIndex >= 0 && nextIndex < images.length) {
+            const nextImage = images[nextIndex];
+            if (nextImage && nextImage.id !== activeImageId) {
+                setActiveImageId(nextImage.id);
+                setModalImage(nextImage.image_url);
+                fetchImageDetails(nextImage.id);
+                navigate(`?id=${nextImage.id}`, { replace: true });
+            }
         }
     };
 
@@ -740,32 +718,6 @@ const Gallery = () => {
         }
     }, [activeImageId]);
 
-    const fetchCommentLikes = async (commentId) => {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-    
-        try {
-            const response = await fetch(`http://localhost:3000/comment_likes/${commentId}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-    
-            if (response.ok) {
-                const data = await response.json();
-                setCommentLikes(prev => ({
-                    ...prev,
-                    [commentId]: data.count
-                }));
-                if (data.user_liked) {
-                    setUserLikedComments(prev => new Set([...prev, commentId]));
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching comment likes:', error);
-        }
-    };
-
     // Add admin controls
     const handleBulkDelete = async () => {
         if (!isAdmin || selectedImages.size === 0) return;
@@ -840,42 +792,61 @@ const Gallery = () => {
         }
     };
     
-    const handleSort = (newSortType) => {
+    const handleSort = async (newSortType) => {
         setSortType(newSortType);
         setPage(1);
         setImages([]);
         setHasMore(true);
         fetchingRef.current = false;
+        await fetchAllCounts(); // Get ALL counts first
     };
-
-    // Add initial fetch
-    useEffect(() => {
-        fetchAllCounts();
-    }, []);
 
     // Define fetchImagesForPage function
     const fetchImagesForPage = async (pageNum) => {
-        if (loading) return; // Prevent multiple fetches
+        if (loading) return;
         setLoading(true);
+        
+        // Ensure we have global counts first
+        if (Object.keys(globalLikeCounts).length === 0) {
+            await fetchAllCounts();
+        }
         
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:3000/images?page=${pageNum}&limit=20`, {
-                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-            });
+            const response = await fetch(
+                `http://localhost:3000/images?page=${pageNum}&limit=20&sortType=${sortType}`, 
+                {
+                    headers: {
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                        'Content-Type': 'application/json'
+                    },
+                    method: 'POST',
+                    body: JSON.stringify({
+                        globalLikeCounts,
+                        globalCommentCounts
+                    })
+                }
+            );
     
             const data = await response.json();
-    
-            setImages(prev => pageNum === 1 ? (data.images || []) : [...prev, ...(data.images || [])]);
-    
-            // ✅ Load more as long as at least 1 image exists
-            setHasMore((data.images?.length || 0) > 0);
+            setImages(prev => [...prev, ...(data.images || [])]);
+            setHasMore(data.hasMore);
+            
         } catch (error) {
-            console.error('Error fetching images:', error);
+            console.error('Error:', error);
         } finally {
             setLoading(false);
         }
     };
+
+// Add effect to fetch counts on mount
+useEffect(() => {
+    fetchAllCounts();
+}, []);
+
+    useEffect(() => {
+        fetchImagesForPage(page);
+    }, [page, sortType, timeRange, selectedCategory]);
     
 
     // Use single useEffect for infinite scroll
@@ -900,8 +871,11 @@ const Gallery = () => {
         };
     }, [hasMore, loading]);
 
+    // Add effect to watch for page changes
     useEffect(() => {
-        fetchImagesForPage(page);
+        if (page > 1) {
+            console.log('Page changed to:', page);
+        }
     }, [page]);
 
     return (
