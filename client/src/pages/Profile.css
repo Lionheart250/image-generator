@@ -32,7 +32,7 @@
 }
 
 /* Pseudo-elements for glowing outline */
-.profile-header::after,
+/*.profile-header::after,
 .profile-header::before {
     content: '';
     position: absolute;
@@ -42,12 +42,11 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    z-index: -1; /* Keeps the glow behind the header */
-    padding: 30px; /* Size of the glowing outline */
-    border-radius: 10px; /* Matches the profile-header's border-radius */
-    animation: spin 3s linear infinite; /* Smooth spinning animation */
-}
-
+    z-index: -1; /* Keeps the glow behind the header 
+    padding: 30px; /* Size of the glowing outline 
+    border-radius: 10px; /* Matches the profile-header's border-radius 
+    animation: spin 3s linear infinite; /* Smooth spinning animation 
+}*/
 .profile-header::before {
     filter: blur(1.5rem); /* Creates the soft glow effect */
     opacity: 0.5; /* Reduces intensity of the blur */

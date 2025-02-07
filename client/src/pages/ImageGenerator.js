@@ -7,8 +7,8 @@ import LoraSelector from '../components/LoraSelector';
 
 // Add constants at top
 const dimensions = {
-    Portrait: { width: 832, height: 1216 },
-    Landscape: { width: 1216, height: 832 },
+    Portrait: { width: 768, height: 1280 },
+    Landscape: { width: 1280, height: 768 },
     Square: { width: 1024, height: 1024 }
 };
 
@@ -257,7 +257,9 @@ const LoadingText = () => (
                                 className="image-generator-input"
                             />
                         </div>
+                        
                         <div className="image-generator-form-group">
+                        {/*}
                             <label className="image-generator-label" htmlFor="negativePrompt">Negative Prompt:</label>
                             <input
                                 type="text"
@@ -267,6 +269,7 @@ const LoadingText = () => (
                                 placeholder="what to exclude"
                                 className="image-generator-input"
                             />
+                            */}
                         </div>
                         <button 
                             type="button"

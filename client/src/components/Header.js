@@ -71,7 +71,7 @@ const Header = () => {
         if (user && user.id) {
             fetchProfilePicture();
         }
-    }, [user]); // Add user as dependency
+    }, [user, profilePicture]); // Add profilePicture as dependency
 
     // Header position effect
     useEffect(() => {

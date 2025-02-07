@@ -7,17 +7,39 @@
 
 .lora-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(2, 1fr); /* Two columns */
     gap: 1rem;
 }
 
 .lora-item {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
     padding: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     background: #2a2a2a;
     border-radius: 4px;
+}
+
+.lora-item label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #fff;
+}
+
+.lora-item input[type="checkbox"] {
+    accent-color: #ff0050; /* TikTok red */
+}
+
+.lora-item input[type="range"] {
+    flex: 1;
+    margin: 0 1rem;
+    accent-color: #00f2ea; /* TikTok cyan */
+}
+
+.lora-item span {
+    color: #fff;
 }
 
 .lora-label {
@@ -57,6 +79,56 @@
     width: 90%;
     max-height: 80vh;
     overflow-y: auto;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+.lora-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+.lora-popup-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #ff0050; /* TikTok red */
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close-button:hover {
+    color: #ff0050; /* TikTok red */
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.section-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #00f2ea; /* TikTok cyan */
+}
+
+.lora-section {
+    padding: 1rem 0;
 }
 
 .presets-section {
@@ -83,4 +155,23 @@
 
 .preset-button:hover {
     background: rgba(255, 255, 255, 0.2);
+}
+
+button {
+    background: #ff0050; /* TikTok red */
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #e60045; /* Darker TikTok red */
+}
+
+button:disabled {
+    background: rgba(255, 0, 80, 0.5); /* Disabled TikTok red */
+    cursor: not-allowed;
 }

@@ -151,7 +151,7 @@ const upload = multer({
 // --- User Routes ---
 
 // Register User
-app.post('/register', async (req, res) => {
+app.post('/signup', async (req, res) => {
     const { username, email, password } = req.body;
     const client = await pool.connect();
 
@@ -166,12 +166,16 @@ app.post('/register', async (req, res) => {
         // Hash password and create user
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await client.query(
-            'INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id',
-            [username, hashedPassword, email]
+            'INSERT INTO users (username, password, email, role) VALUES ($1, $2, $3, $4) RETURNING id, username, role',
+            [username, hashedPassword, email, 'user']
         );
 
+        const user = result.rows[0];
+        const token = jwt.sign({ userId: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        const refreshToken = jwt.sign({ userId: user.id, username: user.username, role: user.role }, REFRESH_SECRET, { expiresIn: '30d' });
+
         await client.query('COMMIT');
-        res.json({ id: result.rows[0].id });
+        res.json({ id: user.id, token, refreshToken, message: 'Signup successful' });
 
     } catch (error) {
         await client.query('ROLLBACK');
@@ -335,16 +339,47 @@ app.post('/logout', (req, res) => {
 
 // --- Image Routes ---
 
-// Fetch all images
+// Modify images endpoint to use global sort
 app.get('/images', optionalAuthenticateToken, async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT i.*, u.username, u.profile_picture 
+        const { sortType = 'newest', page = 1, limit = 20 } = req.query;
+        const offset = (page - 1) * limit;
+
+        // Get ALL IDs sorted first
+        const orderQuery = `
+            SELECT i.id
             FROM images i
-            LEFT JOIN users u ON i.user_id = u.id 
-            ORDER BY i.created_at DESC`
+            ORDER BY 
+                CASE 
+                    WHEN $1 = 'mostLiked' THEN (SELECT COUNT(*) FROM likes WHERE image_id = i.id)
+                    WHEN $1 = 'mostCommented' THEN (SELECT COUNT(*) FROM comments WHERE image_id = i.id)
+                    ELSE extract(epoch from i.created_at)::bigint
+                END DESC`;
+
+        const sortedIds = (await pool.query(orderQuery, [sortType])).rows.map(row => row.id);
+        const totalImages = sortedIds.length;
+
+        // Get paginated chunk
+        const result = await pool.query(`
+            SELECT i.*, 
+                   u.username,
+                   u.profile_picture,
+                   (SELECT COUNT(*) FROM likes WHERE image_id = i.id) as like_count,
+                   (SELECT COUNT(*) FROM comments WHERE image_id = i.id) as comment_count,
+                   EXISTS(SELECT 1 FROM likes WHERE image_id = i.id AND user_id = $1) as user_has_liked
+            FROM images i
+            LEFT JOIN users u ON i.user_id = u.id
+            WHERE i.id = ANY($2)
+            ORDER BY array_position($2::int[], i.id)
+            LIMIT $3 OFFSET $4`,
+            [req.user?.userId || null, sortedIds.slice(offset, offset + limit), limit, offset]
         );
-        res.json({ images: result.rows });
+
+        res.json({
+            images: result.rows,
+            hasMore: offset + result.rows.length < totalImages,
+            total: totalImages
+        });
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ error: 'Database error' });
@@ -379,6 +414,30 @@ app.get('/images/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
     } catch (error) {
         console.error("Database error:", error);
         res.status(500).json({ error: "An unexpected error occurred" });
+    }
+});
+
+app.get('/image_counts', authenticateTokenWithAutoRefresh, async (req, res) => {
+    try {
+        const likes = await pool.query(`
+            SELECT image_id, COUNT(*) as count 
+            FROM likes 
+            GROUP BY image_id
+        `);
+        
+        const comments = await pool.query(`
+            SELECT image_id, COUNT(*) as count 
+            FROM comments 
+            GROUP BY image_id
+        `);
+
+        res.json({
+            likes: Object.fromEntries(likes.rows.map(r => [r.image_id, r.count])),
+            comments: Object.fromEntries(comments.rows.map(r => [r.image_id, r.count]))
+        });
+    } catch (error) {
+        console.error('Error fetching counts:', error);
+        res.status(500).json({ error: 'Failed to fetch counts' });
     }
 });
 
@@ -467,6 +526,30 @@ app.get('/image_likes/:imageId', authenticateTokenWithAutoRefresh, (req, res) =>
             res.json({ imageId, likeCount: result.rows[0].likecount });
         }
     );
+});
+
+// Delete image
+app.delete('/images/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
+    try {
+        const isAdmin = req.user.role === 'admin';
+        
+        const query = isAdmin 
+            ? 'DELETE FROM images WHERE id = $1 RETURNING *'
+            : 'DELETE FROM images WHERE id = $1 AND user_id = $2 RETURNING *';
+            
+        const params = isAdmin ? [req.params.id] : [req.params.id, req.user.userId];
+        
+        const result = await pool.query(query, params);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Image not found or unauthorized' });
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete error:', error);
+        res.status(500).json({ error: 'Failed to delete image' });
+    }
 });
 
 // Fetch likes for a specific image
@@ -611,26 +694,6 @@ app.route('/likes/:imageId')
         }
     });
 
-
-// Delete image
-app.delete('/images/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
-    try {
-        const result = await pool.query(
-            'DELETE FROM images WHERE id = $1 AND user_id = $2 RETURNING *',
-            [req.params.id, req.user.userId]
-        );
-
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Image not found or unauthorized' });
-        }
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Delete error:', error);
-        res.status(500).json({ error: 'Failed to delete image' });
-    }
-});
-
 // --- Comment Routes ---
 
 // Add Comment to an Image
@@ -676,30 +739,22 @@ app.get('/fetch_comments', authenticateTokenWithAutoRefresh, async (req, res) =>
                 c.*,
                 u.username,
                 u.profile_picture,
-                COUNT(DISTINCT l.id) as like_count,
+                COUNT(DISTINCT cl.id) as like_count,
                 EXISTS (
                     SELECT 1 
-                    FROM likes l2 
-                    WHERE l2.comment_id = c.id 
-                    AND l2.user_id = $2
+                    FROM comment_likes cl2 
+                    WHERE cl2.comment_id = c.id 
+                    AND cl2.user_id = $2
                 ) as user_has_liked
             FROM comments c 
             JOIN users u ON c.user_id = u.id 
-            LEFT JOIN likes l ON l.comment_id = c.id
+            LEFT JOIN comment_likes cl ON cl.comment_id = c.id
             WHERE c.image_id = $1 
             GROUP BY c.id, u.username, u.profile_picture
             ORDER BY c.created_at DESC`,
             [imageId, userId]
         );
-        
-        console.log(`Found ${result.rows.length} comments with likes`);
-        res.json({ 
-            comments: result.rows.map(comment => ({
-                ...comment,
-                like_count: parseInt(comment.like_count),
-                user_has_liked: comment.user_has_liked
-            }))
-        });
+        res.json({ comments: result.rows });
     } catch (error) {
         console.error('Error fetching comments:', error);
         res.status(500).json({ error: 'Failed to fetch comments' });
@@ -714,8 +769,14 @@ app.route('/comment_likes/:commentId')
         try {
             const result = await pool.query(`
                 SELECT COUNT(*) as count,
-                EXISTS(SELECT 1 FROM likes WHERE comment_id = $1 AND user_id = $2) as user_liked
-                FROM likes WHERE comment_id = $1`, 
+                EXISTS(
+                    SELECT 1 
+                    FROM comment_likes 
+                    WHERE comment_id = $1 
+                    AND user_id = $2
+                ) as user_liked
+                FROM comment_likes 
+                WHERE comment_id = $1`, 
                 [commentId, userId]
             );
             res.json(result.rows[0]);
@@ -726,66 +787,73 @@ app.route('/comment_likes/:commentId')
     })
     .post(authenticateTokenWithAutoRefresh, async (req, res) => {
         const { commentId } = req.params;
-        const userId = req.user.userId;
-        
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-            
+    const userId = req.user.userId;
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        // Check if like exists in comment_likes table
+        const existingLike = await client.query(
+            'SELECT id FROM comment_likes WHERE comment_id = $1 AND user_id = $2',
+            [commentId, userId]
+        );
+
+        if (existingLike.rows.length > 0) {
+            // Remove like from comment_likes table
             await client.query(
-                'INSERT INTO likes (user_id, comment_id, image_id) VALUES ($1, $2, NULL)',
-                [userId, commentId]
+                'DELETE FROM comment_likes WHERE comment_id = $1 AND user_id = $2',
+                [commentId, userId]
             );
-            
-            const result = await client.query(
-                'SELECT COUNT(*) as count FROM likes WHERE comment_id = $1',
-                [commentId]
-            );
-            
-            await client.query('COMMIT');
-            res.json({ 
-                success: true, 
-                count: parseInt(result.rows[0].count) 
-            });
-        } catch (error) {
-            await client.query('ROLLBACK');
-            console.error('Error liking comment:', error);
-            res.status(500).json({ error: 'Failed to like comment' });
-        } finally {
-            client.release();
-        }
-    })
-    .delete(authenticateTokenWithAutoRefresh, async (req, res) => {
-        const { commentId } = req.params;
-        const userId = req.user.userId;
-        
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-            
+        } else {
+            // Add like to comment_likes table
             await client.query(
-                'DELETE FROM likes WHERE user_id = $1 AND comment_id = $2',
-                [userId, commentId]
+                'INSERT INTO comment_likes (comment_id, user_id) VALUES ($1, $2)',
+                [commentId, userId]
             );
-            
-            const result = await client.query(
-                'SELECT COUNT(*) as count FROM likes WHERE comment_id = $1',
-                [commentId]
-            );
-            
-            await client.query('COMMIT');
-            res.json({ 
-                success: true, 
-                count: parseInt(result.rows[0].count) 
-            });
-        } catch (error) {
-            await client.query('ROLLBACK');
-            console.error('Error unliking comment:', error);
-            res.status(500).json({ error: 'Failed to unlike comment' });
-        } finally {
-            client.release();
         }
-    });
+
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error liking comment:', error);
+        res.status(500).json({ error: 'Failed to toggle like' });
+    } finally {
+        client.release();
+    }
+})
+.delete(authenticateTokenWithAutoRefresh, async (req, res) => {
+    const { commentId } = req.params;
+    const userId = req.user.userId;
+    
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        await client.query(
+            'DELETE FROM comment_likes WHERE user_id = $1 AND comment_id = $2',
+            [userId, commentId]
+        );
+        
+        const result = await client.query(
+            'SELECT COUNT(*) as count FROM comment_likes WHERE comment_id = $1',
+            [commentId]
+        );
+        
+        await client.query('COMMIT');
+        res.json({ 
+            success: true, 
+            count: parseInt(result.rows[0].count) 
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error unliking comment:', error);
+        res.status(500).json({ error: 'Failed to unlike comment' });
+    } finally {
+        client.release();
+    }
+});
 
 // --- Favorites Routes (Optional) ---
 
@@ -910,6 +978,37 @@ app.get('/profile_picture', authenticateTokenWithAutoRefresh, async (req, res) =
     }
 });
 
+app.put('/update_profile/:id', authenticateTokenWithAutoRefresh, async (req, res) => {
+    const userId = req.params.id;
+    const { username, bio } = req.body;
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        const query = `
+            UPDATE users
+            SET username = COALESCE($1, username),
+                bio = COALESCE($2, bio)
+            WHERE id = $3
+            RETURNING username, bio
+        `;
+        const { rows } = await client.query(query, [username, bio, userId]);
+        await client.query('COMMIT');
+
+        if (!rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({ message: 'Profile updated successfully', data: rows[0] });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error updating profile:', err);
+        return res.status(500).json({ error: 'Failed to update profile' });
+    } finally {
+        client.release();
+    }
+});
+
 // Add error handling middleware
 app.use((err, req, res, next) => {
     console.error('Error:', err);
@@ -969,40 +1068,31 @@ app.get('/user_profile/:id', authenticateTokenWithAutoRefresh, (req, res) => {
     });
 });
 // Endpoint to update user profile
-app.post('/update_profile', authenticateTokenWithAutoRefresh, (req, res) => {
-    const userId = req.user.id;
+app.post('/update_profile', authenticateTokenWithAutoRefresh, async (req, res) => {
+    console.log('update_profile called, req.user:', req.user); // Debug log
+    const userId = req.user.id; // Must exist in DB
     const { username, bio } = req.body;
 
     const query = `
         UPDATE users
-        SET username = $1, bio = $2
+        SET username = COALESCE($1, username), 
+            bio = COALESCE($2, bio)
         WHERE id = $3
+        RETURNING username, bio
     `;
-
-    pool.query(query, [username, bio, userId], function (err) {
-        if (err) {
-            console.error('Error updating profile:', err);
-            return res.status(500).json({ error: 'Failed to update profile' });
-        }
-        res.json({ message: 'Profile updated successfully' });
-    });
-});
-
-// Update user profile
-app.put('/update_profile', authenticateTokenWithAutoRefresh, async (req, res) => {
-    const userId = req.user.userId;
-    const { username, email } = req.body;
+    
     try {
-        await pool.query(
-            'UPDATE users SET username = $1, email = $2 WHERE id = $3',
-            [username, email, userId]
-        );
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Profile update error:', error);
+        const result = await pool.query(query, [username, bio, userId]);
+        if (!result.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json({ message: 'Profile updated successfully', data: result.rows[0] });
+    } catch (err) {
+        console.error('Error updating profile:', err);
         res.status(500).json({ error: 'Failed to update profile' });
     }
 });
+
 
 app.get('/user_images/:userId', authenticateTokenWithAutoRefresh, (req, res) => {
     console.log('Request params:', req.params);
@@ -1042,35 +1132,6 @@ app.get('/user_images/:userId', authenticateTokenWithAutoRefresh, (req, res) => 
         console.log('Found images for user:', result.rows?.length);
         res.json({ images: result.rows });
     });
-});
-
-// Add new endpoints for bulk fetching likes and comments
-app.get('/images/likes', async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT image_id, COUNT(*) as count 
-            FROM likes 
-            GROUP BY image_id
-        `);
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Database error' });
-    }
-});
-
-app.get('/images/comments', async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT image_id, json_agg(comments.*) as comments 
-            FROM comments 
-            GROUP BY image_id
-        `);
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Database error' });
-    }
 });
 
 // Start server

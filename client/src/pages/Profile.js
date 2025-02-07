@@ -31,6 +31,7 @@ const Profile = () => {
     const [profilePictureFile, setProfilePictureFile] = useState(null);
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(true);
+    const [file, setFile] = useState(null);
 
     const debouncedOpenModal = useCallback(
         debounce((image) => {
@@ -100,8 +101,11 @@ const Profile = () => {
         if (!id) return;
         
         try {
+            setIsLoading(true);
             console.log('Starting profile fetch for ID:', id);
             const token = localStorage.getItem('token');
+            
+            // Fetch profile data first
             const response = await fetch(`http://localhost:3000/user_profile/${id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -112,22 +116,21 @@ const Profile = () => {
             setUsername(data.username);
             setBio(data.bio || '');
             
-            // Standardize URL construction
-            if (data.profile_picture) {
+            // Only update profile picture if it exists
+            if (data.profile_picture && data.profile_picture !== 'default-avatar.png') {
                 const baseUrl = 'http://localhost:3000';
                 const picturePath = data.profile_picture.startsWith('/') 
                     ? data.profile_picture 
                     : `/${data.profile_picture}`;
-                const profilePicUrl = `${baseUrl}${picturePath}`;
-                
-                console.log('Constructed profile picture URL:', profilePicUrl);
-                console.log('Does file exist at path:', data.profile_picture);
-                setProfilePicture(profilePicUrl);
+                setProfilePicture(`${baseUrl}${picturePath}`);
+            } else {
+                // Keep existing profile picture if available, otherwise set default
+                setProfilePicture(prev => prev || '/default-avatar.png');
             }
-            
         } catch (error) {
             console.error('Error fetching profile:', error);
-            setProfilePicture('/default-avatar.png');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -183,28 +186,45 @@ const Profile = () => {
 
         try {
             const token = localStorage.getItem('token');
-            const formData = new FormData();
-            
+            // Assume "id" is the user's ID from props/useParams
+            const response = await fetch(`http://localhost:3000/update_profile/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ username: tempUsername, bio: tempBio })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to update profile');
+            }
+
+            // Update local state
+            setUsername(data.data.username);
+            setBio(data.data.bio || '');
+
+            // (Optional) Upload new profile picture
             if (profilePictureFile) {
-                formData.append('image', profilePictureFile); // Changed from 'profile_picture' to 'image'
-                
-                const response = await fetch('http://localhost:3000/upload_profile_picture', {
+                const formData = new FormData();
+                formData.append('image', profilePictureFile);
+
+                const picResponse = await fetch('http://localhost:3000/upload_profile_picture', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
+                    headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Failed to upload profile picture');
+                const picData = await picResponse.json();
+                if (!picResponse.ok) {
+                    throw new Error(picData.error || 'Failed to upload profile picture');
                 }
-
-                const data = await response.json();
-                setProfilePicture(data.profilePicturePath);
+                setProfilePicture(`http://localhost:3000/${picData.profilePicturePath}`);
             }
 
+            // Re-fetch to confirm DB changes
+            await fetchUserProfile();
             setIsEditing(false);
             setMessage('Profile updated successfully');
         } catch (error) {
@@ -214,7 +234,7 @@ const Profile = () => {
             setLoading(false);
         }
     };
-    
+
     const handleCommentLike = async (commentId) => {
         const token = localStorage.getItem('token');
         if (!token) return;
@@ -437,6 +457,76 @@ const Profile = () => {
             isMounted = false;
         };
     }, [id]);
+
+    const handleFileChange = (e) => {
+        setFile(e.target.files[0]);
+    };
+
+    const handleUpload = async () => {
+        if (!file) {
+            setMessage('Please select a file to upload.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('profile_picture', file);
+
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch('http://localhost:3000/upload_profile_picture', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('Profile picture updated:', data);
+            setMessage('Profile picture updated successfully.');
+
+            // Re-fetch the profile picture
+            await fetchProfilePicture();
+        } catch (error) {
+            console.error('Error updating profile picture:', error);
+            setMessage('Failed to update profile picture.');
+        }
+    };
+
+    const fetchProfilePicture = async () => {
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch('http://localhost:3000/profile_picture', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            setProfilePicture(data.profile_picture);
+        } catch (error) {
+            console.error('Error fetching profile picture:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchProfilePicture();
+    }, []);
+
+    useEffect(() => {
+        // This useEffect will run whenever profilePicture changes
+        if (profilePicture) {
+            console.log('Profile picture updated:', profilePicture);
+        }
+    }, [profilePicture]);
 
     return (
         <div className="profile-container">
@@ -676,7 +766,7 @@ const Profile = () => {
                     </div>
                 </div>
             )}
-        </div>
+        </div>    
     );
 };
 
